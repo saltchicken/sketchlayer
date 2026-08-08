@@ -1,11 +1,8 @@
 use gtk4 as gtk;
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, DrawingArea, GestureStylus};
+use gtk::{gdk, Application, ApplicationWindow, CssProvider, DrawingArea, GestureStylus};
 use std::cell::RefCell;
 use std::rc::Rc;
-
-// Import the Perfect Freehand rust port (freedraw)
-use freedraw::{get_stroke, InputPoint, StrokeOptions};
 
 #[derive(Clone, Copy)]
 struct Point {
@@ -33,7 +30,18 @@ fn main() {
 }
 
 fn build_ui(app: &Application) {
-    // 1. Initialize our shared application state
+    // 1. Inject CSS to strip the default opaque window background
+    let provider = CssProvider::new();
+    // Use load_from_data instead of load_from_string for this gtk4-rs version
+    provider.load_from_data("window { background-color: transparent; }");
+    
+    gtk::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("Could not connect to a display."),
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+
+    // 2. Initialize our shared application state
     let state = Rc::new(RefCell::new(AppState {
         strokes: Vec::new(),
         current_stroke: None,
@@ -43,12 +51,14 @@ fn build_ui(app: &Application) {
     drawing_area.set_vexpand(true);
     drawing_area.set_hexpand(true);
 
-    // 2. Set up the Cairo Rendering Loop
+    // 3. Set up the Cairo Rendering Loop
     let state_draw = state.clone();
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
-        // Clear background to black
-        cr.set_source_rgb(0.0, 0.0, 0.0);
+        // Clear the canvas using a transparent color and the Clear operator
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+        cr.set_operator(gtk::cairo::Operator::Clear);
         cr.paint().expect("Failed to clear background");
+        cr.set_operator(gtk::cairo::Operator::Over); // Restore default blending for strokes
 
         let state = state_draw.borrow();
         
@@ -60,8 +70,7 @@ fn build_ui(app: &Application) {
                 let p1 = &stroke.points[0];
                 let p2 = &stroke.points[1];
                 
-                cr.set_line_width(1.0 + (p1.pressure * 3.0)); // Thinner base for pencil feel
-                // Set RGBA: White color, Alpha based on pressure
+                cr.set_line_width(1.0 + (p1.pressure * 3.0)); 
                 cr.set_source_rgba(1.0, 1.0, 1.0, p1.pressure.clamp(0.1, 1.0));
                 
                 cr.move_to(p1.x, p1.y);
@@ -85,11 +94,8 @@ fn build_ui(app: &Application) {
                 let cp2_x = end_x + (2.0 / 3.0) * (p_ctrl.x - end_x);
                 let cp2_y = end_y + (2.0 / 3.0) * (p_ctrl.y - end_y);
 
-                // 1. Dynamic Thickness
                 cr.set_line_width(1.0 + (p_ctrl.pressure * 3.0));
                 
-                // 2. Dynamic Opacity (Intensity)
-                // Maps the 0.0 - 1.0 pressure range to the alpha channel
                 let alpha = p_ctrl.pressure.clamp(0.1, 1.0);
                 cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
 
@@ -110,18 +116,16 @@ fn build_ui(app: &Application) {
             cr.stroke().expect("Failed to stroke path");
         };
 
-        // Render all finalized strokes
         for stroke in &state.strokes {
             draw_stroke(stroke);
         }
 
-        // Render the stroke currently being drawn
         if let Some(current) = &state.current_stroke {
             draw_stroke(current);
         }
     });
 
-    // 3. Set up Wacom Tablet / Stylus Event Handlers
+    // 4. Set up Wacom Tablet / Stylus Event Handlers
     let stylus = GestureStylus::new();
     
     // Handle Pen Down
@@ -144,7 +148,6 @@ fn build_ui(app: &Application) {
         
         if let Some(stroke) = &mut state.current_stroke {
             stroke.points.push(Point { x, y, pressure });
-            // Request a redraw to update the screen
             da_motion.queue_draw(); 
         }
     });
@@ -163,7 +166,7 @@ fn build_ui(app: &Application) {
 
     drawing_area.add_controller(stylus);
 
-    // 4. Build the borderless overlay window
+    // 5. Build the borderless overlay window
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Minimal Sketch")
