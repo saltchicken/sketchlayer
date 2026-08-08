@@ -44,11 +44,11 @@ fn build_ui(app: &Application) {
     let state_draw = state.clone();
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
         // Clear background to white
-        cr.set_source_rgb(1.0, 1.0, 1.0);
+        cr.set_source_rgb(0.0, 0.0, 0.0);
         cr.paint().expect("Failed to clear background");
 
         // Set ink properties
-        cr.set_source_rgb(0.1, 0.1, 0.1); 
+        cr.set_source_rgb(1.0, 1.0, 1.0); 
         cr.set_line_cap(gtk::cairo::LineCap::Round);
         cr.set_line_join(gtk::cairo::LineJoin::Round);
 
