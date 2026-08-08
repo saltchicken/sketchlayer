@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 cairo-rs = "0.22.0"
 gtk4 = { version = "0.11.4", features = ["v4_10"] }
+freedraw = "1.0.4"
