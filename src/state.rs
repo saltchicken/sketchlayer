@@ -3,6 +3,12 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use crate::config::Config;
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum EraseMode {
+    Vector,
+    Pixel,
+}
+
 #[derive(Clone, Copy)]
 pub struct Point {
     pub x: f64,
@@ -15,12 +21,13 @@ pub struct Stroke {
     pub id: u64, // Used to preserve z-order when undoing erasures
     pub points: Vec<Point>,
     pub color: (f64, f64, f64), // (R, G, B)
+    pub is_eraser: bool,
 }
 
 #[derive(Clone)]
 pub enum Action {
     Draw(Stroke),
-    Erase(Vec<Stroke>), // Can contain multiple strokes deleted in one swipe
+    Erase(Vec<Stroke>), // Can contain multiple strokes deleted in one swipe (Vector mode)
     Clear(Vec<Stroke>), // Saves the entire canvas when cleared
 }
 
@@ -33,6 +40,7 @@ pub struct AppState {
     pub current_stroke: Option<Stroke>,
     pub current_erased: Vec<Stroke>, // Accumulates erased strokes during a single swipe
     pub is_erasing: bool,
+    pub erase_mode: EraseMode,
     
     pub current_color: (f64, f64, f64),
     pub white_background: bool,
@@ -50,6 +58,7 @@ impl AppState {
             current_stroke: None,
             current_erased: Vec::new(),
             is_erasing: false,
+            erase_mode: EraseMode::Vector,
             
             current_color: (0.0, 0.0, 0.0),
             white_background: false,

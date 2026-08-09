@@ -31,17 +31,19 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     let full_path = save_dir.join(&filename);
     let path_str = full_path.to_str().expect("Path contains invalid UTF-8");
 
+    let is_white_bg = state.white_background;
+
     // 4. Save using the full path
     match gtk::cairo::SvgSurface::new(width, height, Some(path_str)) {
         Ok(surface) => {
             let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
 
             for stroke in &state.strokes {
-                render_stroke(&cr, stroke);
+                render_stroke(&cr, stroke, is_white_bg);
             }
 
             if let Some(current) = &state.current_stroke {
-                render_stroke(&cr, current);
+                render_stroke(&cr, current, is_white_bg);
             }
 
             surface.finish();
@@ -51,19 +53,48 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     }
 }
 
-pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
+pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: bool) {
     if stroke.points.len() < 2 {
         return;
     }
 
+    // Use DestOut to cut a hole for Pixel Erasers, or Over to layer colors normally
+    if stroke.is_eraser {
+        if is_white_bg {
+            cr.set_operator(gtk::cairo::Operator::Over);
+        } else {
+            cr.set_operator(gtk::cairo::Operator::DestOut);
+        }
+    } else {
+        cr.set_operator(gtk::cairo::Operator::Over);
+    }
+
+    // Force default butt caps and miter joins to prevent overlapping opacity dots at segment joints
+    cr.set_line_cap(gtk::cairo::LineCap::Butt);
+    cr.set_line_join(gtk::cairo::LineJoin::Miter);
+
     let (r, g, b) = stroke.color;
+
+    let set_style = |pressure: f64| {
+        let alpha = pressure.clamp(0.1, 1.0);
+        if stroke.is_eraser {
+            cr.set_line_width(5.0 + (pressure * 15.0)); // Make the eraser thicker
+            if is_white_bg {
+                cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
+            } else {
+                cr.set_source_rgba(0.0, 0.0, 0.0, alpha); // Alpha drives the DestOut erasure
+            }
+        } else {
+            cr.set_line_width(1.0 + (pressure * 3.0));
+            cr.set_source_rgba(r, g, b, alpha);
+        }
+    };
 
     if stroke.points.len() == 2 {
         let p1 = &stroke.points[0];
         let p2 = &stroke.points[1];
 
-        cr.set_line_width(1.0 + (p1.pressure * 3.0));
-        cr.set_source_rgba(r, g, b, p1.pressure.clamp(0.1, 1.0));
+        set_style(p1.pressure);
 
         cr.move_to(p1.x, p1.y);
         cr.line_to(p2.x, p2.y);
@@ -86,10 +117,7 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
         let cp2_x = end_x + (2.0 / 3.0) * (p_ctrl.x - end_x);
         let cp2_y = end_y + (2.0 / 3.0) * (p_ctrl.y - end_y);
 
-        cr.set_line_width(1.0 + (p_ctrl.pressure * 3.0));
-
-        let alpha = p_ctrl.pressure.clamp(0.1, 1.0);
-        cr.set_source_rgba(r, g, b, alpha);
+        set_style(p_ctrl.pressure);
 
         cr.move_to(start_x, start_y);
         cr.curve_to(cp1_x, cp1_y, cp2_x, cp2_y, end_x, end_y);
@@ -100,8 +128,7 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
     }
 
     let p_last = &stroke.points[stroke.points.len() - 1];
-    cr.set_line_width(1.0 + (p_last.pressure * 3.0));
-    cr.set_source_rgba(r, g, b, p_last.pressure.clamp(0.1, 1.0));
+    set_style(p_last.pressure);
     cr.move_to(start_x, start_y);
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");

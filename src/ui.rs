@@ -110,6 +110,7 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     }
     menu_box.append(&color_box);
 
+    let btn_erase_mode = Button::with_label("Erase Mode: Vector");
     let btn_undo = Button::with_label("Undo");
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
@@ -130,6 +131,7 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     let btn_hide = Button::with_label("Hide Overlay");
     let btn_quit = Button::with_label("Quit");
 
+    menu_box.append(&btn_erase_mode);
     menu_box.append(&btn_undo);
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
@@ -138,6 +140,18 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     menu_box.append(&btn_clear);
     menu_box.append(&btn_hide);
     menu_box.append(&btn_quit);
+
+    let state_em = state.clone();
+    btn_erase_mode.connect_clicked(move |btn| {
+        let mut s = state_em.borrow_mut();
+        if s.erase_mode == crate::state::EraseMode::Vector {
+            s.erase_mode = crate::state::EraseMode::Pixel;
+            btn.set_label("Erase Mode: Pixel");
+        } else {
+            s.erase_mode = crate::state::EraseMode::Vector;
+            btn.set_label("Erase Mode: Vector");
+        }
+    });
 
     let da_undo = drawing_area.clone();
     let state_undo = state.clone();
@@ -220,8 +234,9 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
         let state = state.borrow();
+        let is_white_bg = state.white_background;
 
-        if state.white_background {
+        if is_white_bg {
             cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
             cr.set_operator(gtk::cairo::Operator::Source);
         } else {
@@ -233,11 +248,11 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         cr.set_operator(gtk::cairo::Operator::Over);
 
         for stroke in &state.strokes {
-            render_stroke(cr, stroke);
+            render_stroke(cr, stroke, is_white_bg);
         }
 
         if let Some(current) = &state.current_stroke {
-            render_stroke(cr, current);
+            render_stroke(cr, current, is_white_bg);
         }
     });
 }
@@ -262,30 +277,48 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
             return;
         }
 
-        let is_eraser = button != 1
+        let is_eraser_tool = button != 1
             || gesture
                 .device_tool()
                 .map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
 
         let mut state = state_down.borrow_mut();
+        let erase_mode = state.erase_mode;
 
-        if is_eraser {
-            state.is_erasing = true;
-            state.current_erased.clear();
-            if state.erase_at(x, y) {
-                da_down.queue_draw();
+        if is_eraser_tool {
+            if erase_mode == crate::state::EraseMode::Vector {
+                state.is_erasing = true; // Tracks vector erasing
+                state.current_erased.clear();
+                if state.erase_at(x, y) {
+                    da_down.queue_draw();
+                }
+            } else {
+                // Pixel Erase: Handled via specialized drawing strokes
+                state.is_erasing = false;
+                let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
+                let id = state.next_stroke_id;
+                state.next_stroke_id += 1;
+
+                state.current_stroke = Some(Stroke {
+                    id,
+                    points: vec![Point { x, y, pressure }],
+                    color: (0.0, 0.0, 0.0), // Color will be dynamically determined by blending mode
+                    is_eraser: true,
+                });
             }
         } else {
+            // Normal Draw
+            state.is_erasing = false;
             let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
             let color = state.current_color;
             let id = state.next_stroke_id;
             state.next_stroke_id += 1;
 
-            state.is_erasing = false;
             state.current_stroke = Some(Stroke {
                 id,
                 points: vec![Point { x, y, pressure }],
                 color,
+                is_eraser: false,
             });
         }
     });
@@ -295,11 +328,11 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     stylus.connect_motion(move |gesture, x, y| {
         let mut state = state_motion.borrow_mut();
 
-        if state.is_erasing {
+        if state.is_erasing { // Vector erase in progress
             if state.erase_at(x, y) {
                 da_motion.queue_draw();
             }
-        } else if let Some(stroke) = &mut state.current_stroke {
+        } else if let Some(stroke) = &mut state.current_stroke { // Draw or Pixel Erase
             let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
             stroke.points.push(Point { x, y, pressure });
             da_motion.queue_draw();
@@ -311,14 +344,15 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     stylus.connect_up(move |_gesture, _x, _y| {
         let mut state = state_up.borrow_mut();
         
-        if state.is_erasing {
+        if state.is_erasing { // End of vector erase
             state.is_erasing = false;
             if !state.current_erased.is_empty() {
                 let erased = std::mem::take(&mut state.current_erased);
                 state.history.push(crate::state::Action::Erase(erased));
                 state.redo_history.clear();
             }
-        } else if let Some(stroke) = state.current_stroke.take() {
+        } else if let Some(stroke) = state.current_stroke.take() { // End of Draw/Pixel Erase
+            // Pixel erases behave perfectly as `Action::Draw`s in the history!
             state.history.push(crate::state::Action::Draw(stroke.clone()));
             state.strokes.push(stroke);
             state.redo_history.clear();
