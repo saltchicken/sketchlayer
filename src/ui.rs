@@ -113,7 +113,18 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     let btn_undo = Button::with_label("Undo");
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
-    let btn_opacity = Button::with_label("Toggle Opacity");
+
+    let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
+    opacity_box.set_margin_start(4);
+    opacity_box.set_margin_end(4);
+    let opacity_label = gtk::Label::new(Some("Opacity:"));
+    let opacity_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
+    opacity_scale.set_value(100.0);
+    opacity_scale.set_draw_value(true);
+    opacity_scale.set_hexpand(true);
+    opacity_box.append(&opacity_label);
+    opacity_box.append(&opacity_scale);
+
     let btn_opt = Button::with_label("Toggle Optimization");
     let btn_save = Button::with_label("Save Sketch");
     let btn_clear = Button::with_label("Clear Canvas");
@@ -123,7 +134,7 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     menu_box.append(&btn_undo);
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
-    menu_box.append(&btn_opacity);
+    menu_box.append(&opacity_box);
     menu_box.append(&btn_opt);
     menu_box.append(&btn_save);
     menu_box.append(&btn_clear);
@@ -160,17 +171,10 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     });
 
     let da_opacity = drawing_area.clone();
-    let pop_opacity = popover.clone();
-    btn_opacity.connect_clicked(move |_| {
+    opacity_scale.connect_value_changed(move |scale| {
         if let Some(window) = da_opacity.root().and_downcast_ref::<ApplicationWindow>() {
-            let current = window.opacity();
-            if current < 1.0 {
-                window.set_opacity(1.0);
-            } else {
-                window.set_opacity(0.5);
-            }
+            window.set_opacity(scale.value() / 100.0);
         }
-        pop_opacity.popdown();
     });
 
     let da_opt = drawing_area.clone();
@@ -405,12 +409,6 @@ fn setup_keyboard_events(window: &ApplicationWindow, drawing_area: &DrawingArea,
     key_controller.connect_key_pressed(move |_ctrl, key, _keycode, modifier_state| {
         if key == gdk::Key::Escape {
             window_clone.set_visible(false);
-            return glib::Propagation::Stop;
-        }
-
-        if key == gdk::Key::o || key == gdk::Key::O {
-            let current = window_clone.opacity();
-            window_clone.set_opacity(if current < 1.0 { 1.0 } else { 0.5 });
             return glib::Propagation::Stop;
         }
 
