@@ -57,6 +57,123 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     }
 }
 
+pub fn save_grids(state: &AppState) {
+    let cell_w = state.config.grid_cell_width;
+    let cell_h = state.config.grid_cell_height;
+
+    if cell_w <= 0.0 || cell_h <= 0.0 {
+        eprintln!("❌ Invalid grid dimensions");
+        return;
+    }
+
+    // Determine grid layout start position, mirroring ui.rs logic
+    let mut start_x = state.config.grid_offset_x % cell_w;
+    if start_x < 0.0 { start_x += cell_w; }
+    let mut start_y = state.config.grid_offset_y % cell_h;
+    if start_y < 0.0 { start_y += cell_h; }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let save_dir = state.config.get_resolved_save_dir();
+    if !save_dir.exists() {
+        if let Err(e) = fs::create_dir_all(&save_dir) {
+            eprintln!("❌ Failed to create save directory: {:?}", e);
+            return;
+        }
+    }
+
+    // Calculate maximum stroke padding so lines on borders are appropriately exported in adjacent cells
+    let max_pen = state.config.base_pen_width + state.config.pen_pressure_mult;
+    let max_eraser = state.config.base_eraser_width + state.config.eraser_pressure_mult;
+    let padding = max_pen.max(max_eraser) / 2.0;
+
+    let mut active_cells = std::collections::HashSet::new();
+
+    let get_cells_for_bbox = |bbox: &crate::state::BoundingBox| {
+        let min_c = ((bbox.min_x - padding - start_x) / cell_w).floor() as i32;
+        let max_c = ((bbox.max_x + padding - start_x) / cell_w).floor() as i32;
+        let min_r = ((bbox.min_y - padding - start_y) / cell_h).floor() as i32;
+        let max_r = ((bbox.max_y + padding - start_y) / cell_h).floor() as i32;
+        (min_c, max_c, min_r, max_r)
+    };
+
+    // Evaluate which cells have strokes
+    for stroke in &state.strokes {
+        let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
+        for c in min_c..=max_c {
+            for r in min_r..=max_r {
+                active_cells.insert((c, r));
+            }
+        }
+    }
+
+    if let Some(current) = &state.current_stroke {
+        let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
+        for c in min_c..=max_c {
+            for r in min_r..=max_r {
+                active_cells.insert((c, r));
+            }
+        }
+    }
+
+    if active_cells.is_empty() {
+        println!("ℹ️ No geometry to save in grids.");
+        return;
+    }
+
+    let is_white_bg = state.white_background;
+
+    for (c, r) in active_cells {
+        let cell_x = start_x + c as f64 * cell_w;
+        let cell_y = start_y + r as f64 * cell_h;
+
+        let filename = format!("sketchlayer_{}_cell_{}_{}.svg", timestamp, c, r);
+        let full_path = save_dir.join(&filename);
+
+        let path_str = match full_path.to_str() {
+            Some(s) => s,
+            None => continue,
+        };
+
+        match gtk::cairo::SvgSurface::new(cell_w, cell_h, Some(path_str)) {
+            Ok(surface) => {
+                let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+
+                // Shift view to center on this cell coordinate
+                cr.translate(-cell_x, -cell_y);
+
+                if is_white_bg {
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+                    cr.paint().expect("Failed to paint background");
+                    cr.set_operator(gtk::cairo::Operator::Over);
+                }
+
+                // Render intersecting strokes
+                for stroke in &state.strokes {
+                    let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
+                    if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
+                        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+                    }
+                }
+
+                if let Some(current) = &state.current_stroke {
+                    let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
+                    if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
+                        render_stroke(&cr, current, is_white_bg, &state.config);
+                    }
+                }
+
+                surface.finish();
+                println!("✅ Grid cell ({}, {}) saved to {}", c, r, full_path.display());
+            }
+            Err(e) => eprintln!("❌ Failed to save grid cell SVG: {:?}", e),
+        }
+    }
+}
+
 pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: bool, config: &Config) {
     if stroke.points.len() < 2 {
         return;

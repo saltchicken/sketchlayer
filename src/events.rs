@@ -4,7 +4,7 @@ use gtk::{ApplicationWindow, DrawingArea, EventControllerKey, GestureStylus, Pop
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::render::save_sketch;
+use crate::render::{save_sketch, save_grids};
 use crate::state::AppState;
 
 pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>, popover: Popover) {
@@ -120,7 +120,11 @@ pub fn setup_keyboard_events(window: &ApplicationWindow, drawing_area: &DrawingA
             if (key == gdk::Key::s || key == gdk::Key::S)
                 && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
             {
-                save_sketch(&window, &state.borrow());
+                if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
+                    save_grids(&state.borrow());
+                } else {
+                    save_sketch(&window, &state.borrow());
+                }
                 return glib::Propagation::Stop;
             }
 
