@@ -27,7 +27,23 @@ fn main() {
         .application_id("com.github.minimal_sketch")
         .build();
 
-    app.connect_activate(build_ui);
+    app.connect_activate(|app| {
+        let windows = app.windows();
+        
+        if let Some(window) = windows.first() {
+            // The app is already running, toggle visibility
+            if window.is_visible() {
+                window.set_visible(false);
+            } else {
+                window.set_visible(true);
+                window.present();
+            }
+        } else {
+            // First time launch, build the UI
+            build_ui(app);
+        }
+    });
+
     app.run();
 }
 
@@ -168,13 +184,20 @@ fn build_ui(app: &Application) {
     window.set_anchor(Edge::Right, true);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
 
-    // 2. Add SVG Saving to the Key Controller
+    // 2. Add Key Controller for SVG Saving, Hiding, and Quitting
     let key_controller = EventControllerKey::new();
     let window_clone = window.clone();
     let state_save = state.clone();
     
     key_controller.connect_key_pressed(move |_ctrl, key, _keycode, modifier_state| {
+        // ESCAPE: Hide the window (keeps state in memory)
         if key == gdk::Key::Escape {
+            window_clone.set_visible(false); 
+            return glib::Propagation::Stop;
+        }
+
+        // CTRL + Q: Actually close the app completely and drop state
+        if (key == gdk::Key::q || key == gdk::Key::Q) && modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
             window_clone.close();
             return glib::Propagation::Stop;
         }
