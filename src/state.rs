@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use crate::config::Config;
+use gtk4 as gtk;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -37,6 +38,11 @@ pub struct AppState {
     pub current_color: (f64, f64, f64),
     pub white_background: bool,
     pub config: Config,
+
+    // Caching for optimized rendering
+    pub optimized_rendering: bool,
+    pub cache_surface: Option<gtk::cairo::ImageSurface>,
+    pub cache_valid: bool,
 }
 
 impl AppState {
@@ -54,11 +60,16 @@ impl AppState {
             current_color: (0.0, 0.0, 0.0),
             white_background: false,
             config: Config::load(),
+
+            optimized_rendering: true,
+            cache_surface: None,
+            cache_valid: false,
         }))
     }
 
     pub fn undo(&mut self) -> bool {
         if let Some(action) = self.history.pop() {
+            self.cache_valid = false; // Invalidate cache on history change
             match action {
                 Action::Draw(stroke) => {
                     self.strokes.pop(); // The drawn stroke is always at the end
@@ -83,6 +94,7 @@ impl AppState {
 
     pub fn redo(&mut self) -> bool {
         if let Some(action) = self.redo_history.pop() {
+            self.cache_valid = false; // Invalidate cache on history change
             match action {
                 Action::Draw(stroke) => {
                     self.strokes.push(stroke.clone());
@@ -146,6 +158,7 @@ impl AppState {
                 let removed_stroke = self.strokes.remove(i);
                 self.current_erased.push(removed_stroke);
                 erased_any = true;
+                self.cache_valid = false; // Invalidate cache when a stroke is erased
             }
         }
 

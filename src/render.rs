@@ -2,7 +2,7 @@ use gtk::ApplicationWindow;
 use gtk::prelude::*;
 use gtk4 as gtk;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fs; // <-- Add this import
+use std::fs;
 
 use crate::state::{AppState, Stroke};
 
@@ -105,4 +105,28 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
     cr.move_to(start_x, start_y);
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");
+}
+
+pub fn render_active_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
+    if stroke.points.len() < 2 {
+        return;
+    }
+
+    let (r, g, b) = stroke.color;
+    
+    // Use the pressure of the FIRST point to dictate a constant live preview width/opacity
+    let p_first = &stroke.points[0];
+    
+    cr.set_line_width(1.0 + (p_first.pressure * 3.0));
+    cr.set_source_rgba(r, g, b, p_first.pressure.clamp(0.1, 1.0));
+    
+    cr.move_to(p_first.x, p_first.y);
+    
+    // Build a single, continuous path without curves
+    for p in stroke.points.iter().skip(1) {
+        cr.line_to(p.x, p.y);
+    }
+    
+    // Stroke the entire active path EXACTLY ONCE
+    cr.stroke().expect("Failed to stroke active path");
 }
