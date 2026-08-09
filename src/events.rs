@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::render::save_sketch;
-use crate::state::{AppState, Point, Stroke, BoundingBox};
+use crate::state::AppState;
 
 pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>, popover: Popover) {
     let stylus = GestureStylus::new();
@@ -43,41 +43,15 @@ pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppStat
             let mut state = state.borrow_mut();
             let erase_mode = state.erase_mode;
 
-            if is_eraser_tool {
-                if erase_mode == crate::state::EraseMode::Vector {
-                    state.is_erasing = true;
-                    state.current_erased.clear();
-                    if state.erase_at(x, y) {
-                        drawing_area.queue_draw();
-                    }
-                } else {
-                    state.is_erasing = false;
-                    let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                    let id = state.next_stroke_id;
-                    state.next_stroke_id += 1;
-
-                    state.current_stroke = Some(Stroke {
-                        id,
-                        points: vec![Point { x, y, pressure }],
-                        color: (0.0, 0.0, 0.0),
-                        is_eraser: true,
-                        bbox: BoundingBox::new(x, y),
-                    });
+            if is_eraser_tool && erase_mode == crate::state::EraseMode::Vector {
+                state.is_erasing = true;
+                state.current_erased.clear();
+                if state.erase_at(x, y) {
+                    drawing_area.queue_draw();
                 }
             } else {
-                state.is_erasing = false;
                 let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                let color = state.current_color;
-                let id = state.next_stroke_id;
-                state.next_stroke_id += 1;
-
-                state.current_stroke = Some(Stroke {
-                    id,
-                    points: vec![Point { x, y, pressure }],
-                    color,
-                    is_eraser: false,
-                    bbox: BoundingBox::new(x, y),
-                });
+                state.start_stroke(x, y, pressure, is_eraser_tool);
             }
         }
     ));
@@ -92,10 +66,9 @@ pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppStat
                 if s.erase_at(x, y) {
                     drawing_area.queue_draw();
                 }
-            } else if let Some(stroke) = &mut s.current_stroke { 
+            } else if s.current_stroke.is_some() { 
                 let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                stroke.points.push(Point { x, y, pressure });
-                stroke.bbox.expand(x, y); 
+                s.continue_stroke(x, y, pressure);
                 drawing_area.queue_draw();
             }
         }
@@ -114,11 +87,8 @@ pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppStat
                     s.history.push(crate::state::Action::Erase(erased));
                     s.redo_history.clear();
                 }
-            } else if let Some(stroke) = s.current_stroke.take() { 
-                let rc_stroke = Rc::new(stroke);
-                s.history.push(crate::state::Action::Draw(Rc::clone(&rc_stroke)));
-                s.strokes.push(rc_stroke);
-                s.redo_history.clear();
+            } else if s.current_stroke.is_some() { 
+                s.end_stroke();
                 drawing_area.queue_draw();
             }
         }

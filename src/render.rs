@@ -27,7 +27,14 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
 
     let filename = format!("sketchlayer_{}.svg", timestamp);
     let full_path = save_dir.join(&filename);
-    let path_str = full_path.to_str().expect("Path contains invalid UTF-8");
+    
+    let path_str = match full_path.to_str() {
+        Some(s) => s,
+        None => {
+            eprintln!("❌ Failed to save SVG: Path contains invalid UTF-8");
+            return;
+        }
+    };
 
     let is_white_bg = state.white_background;
 

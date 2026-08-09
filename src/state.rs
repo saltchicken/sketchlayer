@@ -16,6 +16,21 @@ pub struct Point {
     pub pressure: f64,
 }
 
+impl Point {
+    pub fn distance_to_segment(&self, p1: &Point, p2: &Point) -> f64 {
+        let l2 = (p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2);
+        if l2 == 0.0 {
+            return ((self.x - p1.x).powi(2) + (self.y - p1.y).powi(2)).sqrt();
+        }
+        
+        let t = (((self.x - p1.x) * (p2.x - p1.x) + (self.y - p1.y) * (p2.y - p1.y)) / l2).clamp(0.0, 1.0);
+        let proj_x = p1.x + t * (p2.x - p1.x);
+        let proj_y = p1.y + t * (p2.y - p1.y);
+        
+        ((self.x - proj_x).powi(2) + (self.y - proj_y).powi(2)).sqrt()
+    }
+}
+
 #[derive(Clone, Copy, Default)]
 pub struct BoundingBox {
     pub min_x: f64,
@@ -30,10 +45,10 @@ impl BoundingBox {
     }
 
     pub fn expand(&mut self, x: f64, y: f64) {
-        if x < self.min_x { self.min_x = x; }
-        if x > self.max_x { self.max_x = x; }
-        if y < self.min_y { self.min_y = y; }
-        if y > self.max_y { self.max_y = y; }
+        self.min_x = self.min_x.min(x);
+        self.max_x = self.max_x.max(x);
+        self.min_y = self.min_y.min(y);
+        self.max_y = self.max_y.max(y);
     }
 }
 
@@ -43,23 +58,23 @@ pub struct Stroke {
     pub points: Vec<Point>,
     pub color: (f64, f64, f64),
     pub is_eraser: bool,
-    pub bbox: BoundingBox, // Added bounding box for fast intersection tests
+    pub bbox: BoundingBox, 
 }
 
 #[derive(Clone)]
 pub enum Action {
-    Draw(Rc<Stroke>),            // Rc prevents deep clones of massive vectors
+    Draw(Rc<Stroke>),            
     Erase(Vec<Rc<Stroke>>),
     Clear(Vec<Rc<Stroke>>),
 }
 
 pub struct AppState {
     pub next_stroke_id: u64,
-    pub strokes: Vec<Rc<Stroke>>, // Main canvas stores cheap Rc pointers
+    pub strokes: Vec<Rc<Stroke>>, 
     pub history: Vec<Action>,
     pub redo_history: Vec<Action>,
     
-    pub current_stroke: Option<Stroke>, // Actively drawing standard Stroke
+    pub current_stroke: Option<Stroke>, 
     pub current_erased: Vec<Rc<Stroke>>,
     pub is_erasing: bool,
     pub erase_mode: EraseMode,
@@ -86,6 +101,36 @@ impl AppState {
             white_background: false,
             config: Config::load(),
         }))
+    }
+
+    pub fn start_stroke(&mut self, x: f64, y: f64, pressure: f64, is_eraser: bool) {
+        self.is_erasing = false;
+        let id = self.next_stroke_id;
+        self.next_stroke_id += 1;
+
+        self.current_stroke = Some(Stroke {
+            id,
+            points: vec![Point { x, y, pressure }],
+            color: if is_eraser { (0.0, 0.0, 0.0) } else { self.current_color },
+            is_eraser,
+            bbox: BoundingBox::new(x, y),
+        });
+    }
+
+    pub fn continue_stroke(&mut self, x: f64, y: f64, pressure: f64) {
+        if let Some(stroke) = &mut self.current_stroke {
+            stroke.points.push(Point { x, y, pressure });
+            stroke.bbox.expand(x, y);
+        }
+    }
+
+    pub fn end_stroke(&mut self) {
+        if let Some(stroke) = self.current_stroke.take() {
+            let rc_stroke = Rc::new(stroke);
+            self.history.push(Action::Draw(Rc::clone(&rc_stroke)));
+            self.strokes.push(rc_stroke);
+            self.redo_history.clear();
+        }
     }
 
     pub fn undo(&mut self) -> bool {
@@ -137,17 +182,17 @@ impl AppState {
     pub fn erase_at(&mut self, x: f64, y: f64) -> bool {
         let erase_radius = 15.0;
         let mut erased_any = false;
+        let test_point = Point { x, y, pressure: 1.0 }; 
 
         for i in (0..self.strokes.len()).rev() {
             let stroke = &self.strokes[i];
             
-            // 1. FAST FAIL: Check the bounding box first!
+            // FAST FAIL: Check the bounding box first
             if x < stroke.bbox.min_x - erase_radius || x > stroke.bbox.max_x + erase_radius ||
                y < stroke.bbox.min_y - erase_radius || y > stroke.bbox.max_y + erase_radius {
                 continue; 
             }
 
-            // 2. ONLY if inside the bounds, run the expensive segment math
             let mut hit = false;
             if stroke.points.is_empty() {
                 continue;
@@ -159,18 +204,7 @@ impl AppState {
                     let p1 = &stroke.points[j];
                     let p2 = &stroke.points[j + 1];
 
-                    let l2 = (p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2);
-                    let dist = if l2 == 0.0 {
-                        ((x - p1.x).powi(2) + (y - p1.y).powi(2)).sqrt()
-                    } else {
-                        let mut t = ((x - p1.x) * (p2.x - p1.x) + (y - p1.y) * (p2.y - p1.y)) / l2;
-                        t = t.clamp(0.0, 1.0);
-                        let proj_x = p1.x + t * (p2.x - p1.x);
-                        let proj_y = p1.y + t * (p2.y - p1.y);
-                        ((x - proj_x).powi(2) + (y - proj_y).powi(2)).sqrt()
-                    };
-
-                    if dist <= erase_radius {
+                    if test_point.distance_to_segment(p1, p2) <= erase_radius {
                         hit = true;
                         break;
                     }

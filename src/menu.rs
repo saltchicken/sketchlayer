@@ -9,6 +9,29 @@ use std::rc::Rc;
 use crate::render::save_sketch;
 use crate::state::AppState;
 
+fn create_color_button(name: &str, color_val: (f64, f64, f64), state: Rc<RefCell<AppState>>) -> Button {
+    let btn = Button::builder().tooltip_text(name).build();
+    let (r, g, b) = color_val;
+    
+    let css = format!(
+        "button {{ background: rgba({}, {}, {}, 1.0); min-width: 24px; min-height: 24px; border-radius: 12px; }}",
+        (r * 255.0) as i32, (g * 255.0) as i32, (b * 255.0) as i32
+    );
+
+    let provider = CssProvider::new();
+    provider.load_from_data(&css);
+    btn.style_context().add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    btn.connect_clicked(glib::clone!(
+        #[strong] state,
+        move |_| {
+            state.borrow_mut().current_color = color_val;
+        }
+    ));
+    
+    btn
+}
+
 pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) -> Popover {
     let popover = Popover::new();
     popover.set_parent(drawing_area);
@@ -35,32 +58,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ];
 
     for (name, color_val) in colors {
-        let btn = Button::builder().tooltip_text(name).build();
-
-        let (r, g, b) = color_val;
-        let rgba_string = format!(
-            "rgba({}, {}, {}, 1.0)",
-            (r * 255.0) as i32,
-            (g * 255.0) as i32,
-            (b * 255.0) as i32
-        );
-        let css = format!(
-            "button {{ background: {}; min-width: 24px; min-height: 24px; border-radius: 12px; }}",
-            rgba_string
-        );
-
-        let provider = CssProvider::new();
-        provider.load_from_data(&css);
-        btn.style_context()
-            .add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-        btn.connect_clicked(glib::clone!(
-            #[strong] state,
-            move |_| {
-                state.borrow_mut().current_color = color_val;
-            }
-        ));
-        color_box.append(&btn);
+        color_box.append(&create_color_button(name, color_val, state.clone()));
     }
     menu_box.append(&color_box);
 

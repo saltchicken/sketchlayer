@@ -34,9 +34,12 @@ impl Config {
 
         if config_file.exists() {
             if let Ok(contents) = fs::read_to_string(&config_file) {
-                if let Ok(config) = toml::from_str(&contents) {
-                    return config;
+                match toml::from_str(&contents) {
+                    Ok(config) => return config,
+                    Err(e) => eprintln!("Warning: Failed to parse config.toml ({:?}). Falling back to defaults.", e),
                 }
+            } else {
+                eprintln!("Warning: Failed to read config.toml. Falling back to defaults.");
             }
         } else {
             let default_config = Self::default();
