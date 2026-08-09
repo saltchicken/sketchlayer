@@ -106,31 +106,3 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");
 }
-
-pub fn render_active_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
-    if stroke.points.len() < 2 {
-        return;
-    }
-
-    let (r, g, b) = stroke.color;
-    
-    // Check the first 10 points to find the intended starting pressure.
-    // This skips the near-zero pressure of the exact millisecond of screen contact,
-    // while keeping the preview line uniform and stable.
-    let preview_pressure = stroke.points.iter()
-        .take(10)
-        .fold(0.0, |max, p| f64::max(max, p.pressure));
-    
-    cr.set_line_width(1.0 + (preview_pressure * 3.0));
-    cr.set_source_rgba(r, g, b, preview_pressure.clamp(0.1, 1.0));
-    
-    cr.move_to(stroke.points[0].x, stroke.points[0].y);
-    
-    // Build a single, continuous path without curves
-    for p in stroke.points.iter().skip(1) {
-        cr.line_to(p.x, p.y);
-    }
-    
-    // Stroke the entire active path EXACTLY ONCE
-    cr.stroke().expect("Failed to stroke active path");
-}

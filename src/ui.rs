@@ -8,7 +8,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::render::{render_stroke, render_active_stroke, save_sketch};
+use crate::render::{render_stroke, save_sketch};
 use crate::state::{AppState, Point, Stroke};
 
 pub fn build_ui(app: &Application) {
@@ -125,7 +125,6 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     opacity_box.append(&opacity_label);
     opacity_box.append(&opacity_scale);
 
-    let btn_opt = Button::with_label("Toggle Optimization");
     let btn_save = Button::with_label("Save Sketch");
     let btn_clear = Button::with_label("Clear Canvas");
     let btn_hide = Button::with_label("Hide Overlay");
@@ -135,7 +134,6 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
     menu_box.append(&opacity_box);
-    menu_box.append(&btn_opt);
     menu_box.append(&btn_save);
     menu_box.append(&btn_clear);
     menu_box.append(&btn_hide);
@@ -164,7 +162,6 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         {
             let mut s = state_bg.borrow_mut();
             s.white_background = !s.white_background;
-            s.cache_valid = false; // Background changed, invalidate cache
         }
         da_bg.queue_draw();
         pop_bg.popdown();
@@ -175,18 +172,6 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         if let Some(window) = da_opacity.root().and_downcast_ref::<ApplicationWindow>() {
             window.set_opacity(scale.value() / 100.0);
         }
-    });
-
-    let da_opt = drawing_area.clone();
-    let state_opt = state.clone();
-    let pop_opt = popover.clone();
-    btn_opt.connect_clicked(move |_| {
-        {
-            let mut s = state_opt.borrow_mut();
-            s.optimized_rendering = !s.optimized_rendering;
-        }
-        da_opt.queue_draw();
-        pop_opt.popdown();
     });
 
     let da_save = drawing_area.clone();
@@ -208,7 +193,6 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             let strokes = std::mem::take(&mut s.strokes);
             s.history.push(crate::state::Action::Clear(strokes));
             s.redo_history.clear();
-            s.cache_valid = false; // Cleared, invalidate cache
             da_clear.queue_draw();
         }
         pop_clear.popdown();
@@ -234,78 +218,26 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
 }
 
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
-    drawing_area.set_draw_func(move |area, cr, width, height| {
-        let mut state = state.borrow_mut();
+    drawing_area.set_draw_func(move |_area, cr, _width, _height| {
+        let state = state.borrow();
 
-        // 1. Unoptimized Path (The old way)
-        if !state.optimized_rendering {
-            if state.white_background {
-                cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-                cr.set_operator(gtk::cairo::Operator::Source);
-            } else {
-                cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-                cr.set_operator(gtk::cairo::Operator::Clear);
-            }
-            
-            cr.paint().expect("Failed to paint background");
-            cr.set_operator(gtk::cairo::Operator::Over);
+        if state.white_background {
+            cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+            cr.set_operator(gtk::cairo::Operator::Source);
+        } else {
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+            cr.set_operator(gtk::cairo::Operator::Clear);
+        }
+        
+        cr.paint().expect("Failed to paint background");
+        cr.set_operator(gtk::cairo::Operator::Over);
 
-            for stroke in &state.strokes {
-                render_stroke(cr, stroke);
-            }
-
-            if let Some(current) = &state.current_stroke {
-                render_stroke(cr, current); // Keeps the heavy render here for comparison
-            }
-            return;
+        for stroke in &state.strokes {
+            render_stroke(cr, stroke);
         }
 
-        // 2. Optimized Path (Using Cairo Cache Surface)
-        let scale = area.scale_factor();
-        let pixel_w = width * scale;
-        let pixel_h = height * scale;
-
-        // Check if we need to rebuild the cache (resize or cache invalidated)
-        let rebuild = match &state.cache_surface {
-            None => true,
-            Some(surf) => surf.width() != pixel_w || surf.height() != pixel_h || !state.cache_valid,
-        };
-
-        if rebuild && pixel_w > 0 && pixel_h > 0 {
-            let cache = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, pixel_w, pixel_h)
-                .expect("Failed to create cache surface");
-            cache.set_device_scale(scale as f64, scale as f64);
-
-            let cache_cr = gtk::cairo::Context::new(&cache).expect("Failed to create cache context");
-
-            if state.white_background {
-                cache_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-                cache_cr.set_operator(gtk::cairo::Operator::Source);
-            } else {
-                cache_cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-                cache_cr.set_operator(gtk::cairo::Operator::Clear);
-            }
-            cache_cr.paint().unwrap();
-            cache_cr.set_operator(gtk::cairo::Operator::Over);
-
-            // Bake all finished strokes into the cache
-            for stroke in &state.strokes {
-                render_stroke(&cache_cr, stroke);
-            }
-            
-            state.cache_surface = Some(cache);
-            state.cache_valid = true;
-        }
-
-        // Blit the flattened cache directly to the screen (Extremely fast)
-        if let Some(cache) = &state.cache_surface {
-            cr.set_source_surface(cache, 0.0, 0.0).unwrap();
-            cr.paint().unwrap();
-        }
-
-        // Draw ONLY the current active stroke on top using the FAST method
         if let Some(current) = &state.current_stroke {
-            render_active_stroke(cr, current);
+            render_stroke(cr, current);
         }
     });
 }
@@ -385,15 +317,11 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
                 let erased = std::mem::take(&mut state.current_erased);
                 state.history.push(crate::state::Action::Erase(erased));
                 state.redo_history.clear();
-                state.cache_valid = false;
             }
         } else if let Some(stroke) = state.current_stroke.take() {
             state.history.push(crate::state::Action::Draw(stroke.clone()));
             state.strokes.push(stroke);
             state.redo_history.clear();
-            
-            // The stroke is finished, so we invalidate the cache to bake it in
-            state.cache_valid = false; 
             da_up.queue_draw();
         }
     });
