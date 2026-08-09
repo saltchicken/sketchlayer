@@ -1,6 +1,7 @@
 use gtk4 as gtk;
 use gtk::prelude::*;
-use gtk::{gdk, Application, ApplicationWindow, CssProvider, DrawingArea, GestureStylus};
+use gtk::{gdk, glib, Application, ApplicationWindow, CssProvider, DrawingArea, GestureStylus, EventControllerKey};
+use gtk4_layer_shell::{Edge, Layer, LayerShell, KeyboardMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -171,10 +172,35 @@ fn build_ui(app: &Application) {
         .application(app)
         .title("Minimal Sketch")
         .child(&drawing_area)
-        .decorated(false) // Removes title bar and buttons for an overlay feel
-        .default_width(1280)
-        .default_height(720)
         .build();
+
+    // 6. Configure it as a Wayland Layer Shell
+    window.init_layer_shell();
+    
+    // Set it to the Overlay layer so it sits above standard windows
+    window.set_layer(Layer::Overlay);
+
+    // Make the window ignore the standard window manager entirely
+    window.set_anchor(Edge::Top, true);
+    window.set_anchor(Edge::Bottom, true);
+    window.set_anchor(Edge::Left, true);
+    window.set_anchor(Edge::Right, true);
+    
+    window.set_keyboard_mode(KeyboardMode::OnDemand);
+
+    // Add Escape key handler to close the window
+    let key_controller = EventControllerKey::new();
+    let window_clone = window.clone();
+    
+    key_controller.connect_key_pressed(move |_ctrl, key, _keycode, _state| {
+        if key == gdk::Key::Escape {
+            window_clone.close(); // Immediately close the overlay
+            return glib::Propagation::Stop;
+        }
+        glib::Propagation::Proceed
+    });
+    
+    window.add_controller(key_controller);
 
     window.present();
 }
