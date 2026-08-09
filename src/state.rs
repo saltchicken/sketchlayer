@@ -18,6 +18,7 @@ pub struct AppState {
     pub current_stroke: Option<Stroke>,
     pub is_erasing: bool,
     pub current_color: (f64, f64, f64), // Active color
+    pub white_background: bool,         // NEW: Track background state
 }
 
 impl AppState {
@@ -27,6 +28,7 @@ impl AppState {
             current_stroke: None,
             is_erasing: false,
             current_color: (0.0, 0.0, 0.0), // Default to black
+            white_background: false,        // NEW: Default to transparent
         }))
     }
 

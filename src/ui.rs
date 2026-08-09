@@ -111,15 +111,29 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     }
     menu_box.append(&color_box);
 
+    let btn_bg = Button::with_label("Toggle Background"); // NEW
     let btn_save = Button::with_label("Save Sketch");
     let btn_clear = Button::with_label("Clear Canvas");
     let btn_hide = Button::with_label("Hide Overlay");
     let btn_quit = Button::with_label("Quit");
 
+    menu_box.append(&btn_bg);
     menu_box.append(&btn_save);
     menu_box.append(&btn_clear);
     menu_box.append(&btn_hide);
     menu_box.append(&btn_quit);
+
+    let da_bg = drawing_area.clone();
+    let state_bg = state.clone();
+    let pop_bg = popover.clone();
+    btn_bg.connect_clicked(move |_| {
+        {
+            let mut s = state_bg.borrow_mut();
+            s.white_background = !s.white_background;
+        }
+        da_bg.queue_draw();
+        pop_bg.popdown();
+    });
 
     let da_save = drawing_area.clone();
     let state_save_menu = state.clone();
@@ -161,12 +175,19 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
 
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-        cr.set_operator(gtk::cairo::Operator::Clear);
-        cr.paint().expect("Failed to clear background");
-        cr.set_operator(gtk::cairo::Operator::Over);
-
         let state = state.borrow();
+
+        // Check if we should paint a white background or clear it for transparency
+        if state.white_background {
+            cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+            cr.set_operator(gtk::cairo::Operator::Source);
+        } else {
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+            cr.set_operator(gtk::cairo::Operator::Clear);
+        }
+        
+        cr.paint().expect("Failed to paint background");
+        cr.set_operator(gtk::cairo::Operator::Over);
 
         for stroke in &state.strokes {
             render_stroke(cr, stroke);
