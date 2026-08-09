@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::config::Config;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -17,8 +18,9 @@ pub struct AppState {
     pub strokes: Vec<Stroke>,
     pub current_stroke: Option<Stroke>,
     pub is_erasing: bool,
-    pub current_color: (f64, f64, f64), // Active color
-    pub white_background: bool,         // NEW: Track background state
+    pub current_color: (f64, f64, f64),
+    pub white_background: bool,
+    pub config: Config,
 }
 
 impl AppState {
@@ -27,8 +29,9 @@ impl AppState {
             strokes: Vec::new(),
             current_stroke: None,
             is_erasing: false,
-            current_color: (0.0, 0.0, 0.0), // Default to black
-            white_background: false,        // NEW: Default to transparent
+            current_color: (0.0, 0.0, 0.0),
+            white_background: false,
+            config: Config::load(), // <-- Load config on startup
         }))
     }
 

@@ -2,6 +2,7 @@ use gtk::ApplicationWindow;
 use gtk::prelude::*;
 use gtk4 as gtk;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::fs; // <-- Add this import
 
 use crate::state::{AppState, Stroke};
 
@@ -13,9 +14,25 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let filename = format!("sketchlayer_{}.svg", timestamp);
+        
+    // 1. Get the path from the config
+    let save_dir = state.config.get_resolved_save_dir();
+    
+    // 2. Ensure the directory exists
+    if !save_dir.exists() {
+        if let Err(e) = fs::create_dir_all(&save_dir) {
+            eprintln!("❌ Failed to create save directory: {:?}", e);
+            return;
+        }
+    }
 
-    match gtk::cairo::SvgSurface::new(width, height, Some(&filename)) {
+    // 3. Construct the full file path
+    let filename = format!("sketchlayer_{}.svg", timestamp);
+    let full_path = save_dir.join(&filename);
+    let path_str = full_path.to_str().expect("Path contains invalid UTF-8");
+
+    // 4. Save using the full path
+    match gtk::cairo::SvgSurface::new(width, height, Some(path_str)) {
         Ok(surface) => {
             let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
 
@@ -28,7 +45,7 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
             }
 
             surface.finish();
-            println!("✅ Sketch saved to {}", filename);
+            println!("✅ Sketch saved to {}", full_path.display());
         }
         Err(e) => eprintln!("❌ Failed to save SVG: {:?}", e),
     }

@@ -1,3 +1,4 @@
+mod config;
 mod render;
 mod state;
 mod ui;
