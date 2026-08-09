@@ -16,29 +16,51 @@ pub struct Point {
     pub pressure: f64,
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct BoundingBox {
+    pub min_x: f64,
+    pub min_y: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+}
+
+impl BoundingBox {
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { min_x: x, min_y: y, max_x: x, max_y: y }
+    }
+
+    pub fn expand(&mut self, x: f64, y: f64) {
+        if x < self.min_x { self.min_x = x; }
+        if x > self.max_x { self.max_x = x; }
+        if y < self.min_y { self.min_y = y; }
+        if y > self.max_y { self.max_y = y; }
+    }
+}
+
 #[derive(Clone)]
 pub struct Stroke {
-    pub id: u64, // Used to preserve z-order when undoing erasures
+    pub id: u64,
     pub points: Vec<Point>,
-    pub color: (f64, f64, f64), // (R, G, B)
+    pub color: (f64, f64, f64),
     pub is_eraser: bool,
+    pub bbox: BoundingBox, // Added bounding box for fast intersection tests
 }
 
 #[derive(Clone)]
 pub enum Action {
-    Draw(Stroke),
-    Erase(Vec<Stroke>), // Can contain multiple strokes deleted in one swipe (Vector mode)
-    Clear(Vec<Stroke>), // Saves the entire canvas when cleared
+    Draw(Rc<Stroke>),            // Rc prevents deep clones of massive vectors
+    Erase(Vec<Rc<Stroke>>),
+    Clear(Vec<Rc<Stroke>>),
 }
 
 pub struct AppState {
     pub next_stroke_id: u64,
-    pub strokes: Vec<Stroke>,
+    pub strokes: Vec<Rc<Stroke>>, // Main canvas stores cheap Rc pointers
     pub history: Vec<Action>,
     pub redo_history: Vec<Action>,
     
-    pub current_stroke: Option<Stroke>,
-    pub current_erased: Vec<Stroke>, // Accumulates erased strokes during a single swipe
+    pub current_stroke: Option<Stroke>, // Actively drawing standard Stroke
+    pub current_erased: Vec<Rc<Stroke>>,
     pub is_erasing: bool,
     pub erase_mode: EraseMode,
     
@@ -70,11 +92,10 @@ impl AppState {
         if let Some(action) = self.history.pop() {
             match action {
                 Action::Draw(stroke) => {
-                    self.strokes.pop(); // The drawn stroke is always at the end
+                    self.strokes.pop(); 
                     self.redo_history.push(Action::Draw(stroke));
                 }
                 Action::Erase(erased_strokes) => {
-                    // Put the erased strokes back and sort by ID to restore exact z-order
                     self.strokes.extend(erased_strokes.clone());
                     self.strokes.sort_by_key(|s| s.id);
                     self.redo_history.push(Action::Erase(erased_strokes));
@@ -98,7 +119,6 @@ impl AppState {
                     self.history.push(Action::Draw(stroke));
                 }
                 Action::Erase(erased_strokes) => {
-                    // Re-erase the strokes based on their unique IDs
                     let erased_ids: HashSet<u64> = erased_strokes.iter().map(|s| s.id).collect();
                     self.strokes.retain(|s| !erased_ids.contains(&s.id));
                     self.history.push(Action::Erase(erased_strokes));
@@ -118,11 +138,17 @@ impl AppState {
         let erase_radius = 15.0;
         let mut erased_any = false;
 
-        // Iterate backwards so removing items doesn't mess up our loop index
         for i in (0..self.strokes.len()).rev() {
             let stroke = &self.strokes[i];
-            let mut hit = false;
+            
+            // 1. FAST FAIL: Check the bounding box first!
+            if x < stroke.bbox.min_x - erase_radius || x > stroke.bbox.max_x + erase_radius ||
+               y < stroke.bbox.min_y - erase_radius || y > stroke.bbox.max_y + erase_radius {
+                continue; 
+            }
 
+            // 2. ONLY if inside the bounds, run the expensive segment math
+            let mut hit = false;
             if stroke.points.is_empty() {
                 continue;
             } else if stroke.points.len() == 1 {

@@ -1,4 +1,6 @@
 mod config;
+mod events;
+mod menu;
 mod render;
 mod state;
 mod ui;

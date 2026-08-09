@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs;
 
 use crate::state::{AppState, Stroke};
+use crate::config::Config;
 
 pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     let width = window.width() as f64;
@@ -15,10 +16,8 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
         .unwrap()
         .as_secs();
         
-    // 1. Get the path from the config
     let save_dir = state.config.get_resolved_save_dir();
     
-    // 2. Ensure the directory exists
     if !save_dir.exists() {
         if let Err(e) = fs::create_dir_all(&save_dir) {
             eprintln!("❌ Failed to create save directory: {:?}", e);
@@ -26,24 +25,22 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
         }
     }
 
-    // 3. Construct the full file path
     let filename = format!("sketchlayer_{}.svg", timestamp);
     let full_path = save_dir.join(&filename);
     let path_str = full_path.to_str().expect("Path contains invalid UTF-8");
 
     let is_white_bg = state.white_background;
 
-    // 4. Save using the full path
     match gtk::cairo::SvgSurface::new(width, height, Some(path_str)) {
         Ok(surface) => {
             let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
 
             for stroke in &state.strokes {
-                render_stroke(&cr, stroke, is_white_bg);
+                render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
             }
 
             if let Some(current) = &state.current_stroke {
-                render_stroke(&cr, current, is_white_bg);
+                render_stroke(&cr, current, is_white_bg, &state.config);
             }
 
             surface.finish();
@@ -53,12 +50,11 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     }
 }
 
-pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: bool) {
+pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: bool, config: &Config) {
     if stroke.points.len() < 2 {
         return;
     }
 
-    // Use DestOut to cut a hole for Pixel Erasers, or Over to layer colors normally
     if stroke.is_eraser {
         if is_white_bg {
             cr.set_operator(gtk::cairo::Operator::Over);
@@ -69,7 +65,6 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: boo
         cr.set_operator(gtk::cairo::Operator::Over);
     }
 
-    // Force default butt caps and miter joins to prevent overlapping opacity dots at segment joints
     cr.set_line_cap(gtk::cairo::LineCap::Butt);
     cr.set_line_join(gtk::cairo::LineJoin::Miter);
 
@@ -78,14 +73,14 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: boo
     let set_style = |pressure: f64| {
         let alpha = pressure.clamp(0.1, 1.0);
         if stroke.is_eraser {
-            cr.set_line_width(5.0 + (pressure * 15.0)); // Make the eraser thicker
+            cr.set_line_width(config.base_eraser_width + (pressure * config.eraser_pressure_mult)); 
             if is_white_bg {
                 cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
             } else {
-                cr.set_source_rgba(0.0, 0.0, 0.0, alpha); // Alpha drives the DestOut erasure
+                cr.set_source_rgba(0.0, 0.0, 0.0, alpha); 
             }
         } else {
-            cr.set_line_width(1.0 + (pressure * 3.0));
+            cr.set_line_width(config.base_pen_width + (pressure * config.pen_pressure_mult));
             cr.set_source_rgba(r, g, b, alpha);
         }
     };
@@ -95,7 +90,6 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke, is_white_bg: boo
         let p2 = &stroke.points[1];
 
         set_style(p1.pressure);
-
         cr.move_to(p1.x, p1.y);
         cr.line_to(p2.x, p2.y);
         cr.stroke().expect("Failed to stroke path");

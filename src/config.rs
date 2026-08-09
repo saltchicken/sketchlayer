@@ -3,21 +3,29 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(default)]
 pub struct Config {
     pub save_dir: Option<String>,
+    pub base_pen_width: f64,
+    pub pen_pressure_mult: f64,
+    pub base_eraser_width: f64,
+    pub eraser_pressure_mult: f64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             save_dir: Some("~/Pictures/Sketches".to_string()),
+            base_pen_width: 1.0,
+            pen_pressure_mult: 3.0,
+            base_eraser_width: 5.0,
+            eraser_pressure_mult: 15.0,
         }
     }
 }
 
 impl Config {
     pub fn load() -> Self {
-        // Resolve ~/.config/sketchlayer
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from(".config"))
             .join("sketchlayer");
@@ -31,7 +39,6 @@ impl Config {
                 }
             }
         } else {
-            // Create default config file if it doesn't exist
             let default_config = Self::default();
             if let Ok(toml_string) = toml::to_string(&default_config) {
                 let _ = fs::create_dir_all(&config_dir);
@@ -42,7 +49,6 @@ impl Config {
         Self::default()
     }
 
-    /// Resolves the save directory, automatically expanding `~/` to the user's home directory.
     pub fn get_resolved_save_dir(&self) -> PathBuf {
         let dir_str = self.save_dir.as_deref().unwrap_or("~/Pictures/Sketches");
         
