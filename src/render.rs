@@ -1,6 +1,6 @@
-use gtk4 as gtk;
-use gtk::prelude::*;
 use gtk::ApplicationWindow;
+use gtk::prelude::*;
+use gtk4 as gtk;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::{AppState, Stroke};
@@ -8,22 +8,25 @@ use crate::state::{AppState, Stroke};
 pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     let width = window.width() as f64;
     let height = window.height() as f64;
-    
-    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     let filename = format!("sketchlayer_{}.svg", timestamp);
-    
+
     match gtk::cairo::SvgSurface::new(width, height, Some(&filename)) {
         Ok(surface) => {
             let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
-            
+
             for stroke in &state.strokes {
                 render_stroke(&cr, stroke);
             }
-            
+
             if let Some(current) = &state.current_stroke {
                 render_stroke(&cr, current);
             }
-            
+
             surface.finish();
             println!("✅ Sketch saved to {}", filename);
         }
@@ -32,17 +35,19 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
 }
 
 pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
-    if stroke.points.len() < 2 { return; }
+    if stroke.points.len() < 2 {
+        return;
+    }
 
     let (r, g, b) = stroke.color;
 
     if stroke.points.len() == 2 {
         let p1 = &stroke.points[0];
         let p2 = &stroke.points[1];
-        
-        cr.set_line_width(1.0 + (p1.pressure * 3.0)); 
+
+        cr.set_line_width(1.0 + (p1.pressure * 3.0));
         cr.set_source_rgba(r, g, b, p1.pressure.clamp(0.1, 1.0));
-        
+
         cr.move_to(p1.x, p1.y);
         cr.line_to(p2.x, p2.y);
         cr.stroke().expect("Failed to stroke path");
@@ -54,7 +59,7 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
 
     for i in 1..(stroke.points.len() - 1) {
         let p_ctrl = &stroke.points[i];
-        let p_next = &stroke.points[i + 1]; 
+        let p_next = &stroke.points[i + 1];
 
         let end_x = (p_ctrl.x + p_next.x) / 2.0;
         let end_y = (p_ctrl.y + p_next.y) / 2.0;
@@ -65,7 +70,7 @@ pub fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
         let cp2_y = end_y + (2.0 / 3.0) * (p_ctrl.y - end_y);
 
         cr.set_line_width(1.0 + (p_ctrl.pressure * 3.0));
-        
+
         let alpha = p_ctrl.pressure.clamp(0.1, 1.0);
         cr.set_source_rgba(r, g, b, alpha);
 

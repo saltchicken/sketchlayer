@@ -1,13 +1,16 @@
 // src/ui.rs
-use gtk4 as gtk;
 use gtk::prelude::*;
-use gtk::{gdk, glib, Application, ApplicationWindow, CssProvider, DrawingArea, GestureStylus, EventControllerKey, Popover, Button, Orientation};
-use gtk4_layer_shell::{Edge, Layer, LayerShell, KeyboardMode};
+use gtk::{
+    Application, ApplicationWindow, Button, CssProvider, DrawingArea, EventControllerKey,
+    GestureStylus, Orientation, Popover, gdk, glib,
+};
+use gtk4 as gtk;
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::state::{AppState, Point, Stroke};
 use crate::render::{render_stroke, save_sketch};
+use crate::state::{AppState, Point, Stroke};
 
 pub fn build_ui(app: &Application) {
     setup_css();
@@ -20,7 +23,7 @@ pub fn build_ui(app: &Application) {
     drawing_area.set_cursor_from_name(Some("none"));
 
     let popover = build_context_menu(&drawing_area, state.clone());
-    
+
     setup_drawing_area(&drawing_area, state.clone());
     setup_stylus_events(&drawing_area, state.clone(), popover);
 
@@ -46,7 +49,7 @@ pub fn build_ui(app: &Application) {
 fn setup_css() {
     let provider = CssProvider::new();
     provider.load_from_data("window { background-color: transparent; }");
-    
+
     gtk::style_context_add_provider_for_display(
         &gdk::Display::default().expect("Could not connect to a display."),
         &provider,
@@ -84,12 +87,21 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         let btn = Button::builder().tooltip_text(name).build();
 
         let (r, g, b) = color_val;
-        let rgba_string = format!("rgba({}, {}, {}, 1.0)", (r * 255.0) as i32, (g * 255.0) as i32, (b * 255.0) as i32);
-        let css = format!("button {{ background: {}; min-width: 24px; min-height: 24px; border-radius: 12px; }}", rgba_string);
-        
+        let rgba_string = format!(
+            "rgba({}, {}, {}, 1.0)",
+            (r * 255.0) as i32,
+            (g * 255.0) as i32,
+            (b * 255.0) as i32
+        );
+        let css = format!(
+            "button {{ background: {}; min-width: 24px; min-height: 24px; border-radius: 12px; }}",
+            rgba_string
+        );
+
         let provider = CssProvider::new();
         provider.load_from_data(&css);
-        btn.style_context().add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        btn.style_context()
+            .add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
         let state_color = state.clone();
         btn.connect_clicked(move |_| {
@@ -155,7 +167,7 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         cr.set_operator(gtk::cairo::Operator::Over);
 
         let state = state.borrow();
-        
+
         for stroke in &state.strokes {
             render_stroke(cr, stroke);
         }
@@ -169,27 +181,30 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
 fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>, popover: Popover) {
     let stylus = GestureStylus::new();
     stylus.set_button(0);
-    
+
     let state_down = state.clone();
     let da_down = drawing_area.clone();
     let popover_down = popover.clone();
     stylus.connect_down(move |gesture, x, y| {
         let button = gesture.current_button();
-        
+
         if button == 3 {
             popover_down.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
             popover_down.popup();
-            
+
             let mut state = state_down.borrow_mut();
             state.is_erasing = false;
             state.current_stroke = None;
             return;
         }
-        
-        let is_eraser = button != 1 || gesture.device_tool().map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
-        
+
+        let is_eraser = button != 1
+            || gesture
+                .device_tool()
+                .map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
+
         let mut state = state_down.borrow_mut();
-        
+
         if is_eraser {
             state.is_erasing = true;
             if state.erase_at(x, y) {
@@ -199,9 +214,9 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
             let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
             let color = state.current_color;
             state.is_erasing = false;
-            state.current_stroke = Some(Stroke { 
+            state.current_stroke = Some(Stroke {
                 points: vec![Point { x, y, pressure }],
-                color
+                color,
             });
         }
     });
@@ -210,15 +225,15 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     let da_motion = drawing_area.clone();
     stylus.connect_motion(move |gesture, x, y| {
         let mut state = state_motion.borrow_mut();
-        
+
         if state.is_erasing {
             if state.erase_at(x, y) {
-                da_motion.queue_draw(); 
+                da_motion.queue_draw();
             }
         } else if let Some(stroke) = &mut state.current_stroke {
             let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
             stroke.points.push(Point { x, y, pressure });
-            da_motion.queue_draw(); 
+            da_motion.queue_draw();
         }
     });
 
@@ -227,7 +242,7 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     stylus.connect_up(move |_gesture, _x, _y| {
         let mut state = state_up.borrow_mut();
         state.is_erasing = false;
-        
+
         if let Some(stroke) = state.current_stroke.take() {
             state.strokes.push(stroke);
             da_up.queue_draw();
@@ -240,25 +255,29 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
 fn setup_keyboard_events(window: &ApplicationWindow, state: Rc<RefCell<AppState>>) {
     let key_controller = EventControllerKey::new();
     let window_clone = window.clone();
-    
+
     key_controller.connect_key_pressed(move |_ctrl, key, _keycode, modifier_state| {
         if key == gdk::Key::Escape {
-            window_clone.set_visible(false); 
+            window_clone.set_visible(false);
             return glib::Propagation::Stop;
         }
 
-        if (key == gdk::Key::q || key == gdk::Key::Q) && modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
+        if (key == gdk::Key::q || key == gdk::Key::Q)
+            && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
+        {
             window_clone.close();
             return glib::Propagation::Stop;
         }
-        
-        if (key == gdk::Key::s || key == gdk::Key::S) && modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
+
+        if (key == gdk::Key::s || key == gdk::Key::S)
+            && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
+        {
             save_sketch(&window_clone, &state.borrow());
             return glib::Propagation::Stop;
         }
-        
+
         glib::Propagation::Proceed
     });
-    
+
     window.add_controller(key_controller);
 }

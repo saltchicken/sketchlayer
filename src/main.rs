@@ -2,9 +2,9 @@ mod render;
 mod state;
 mod ui;
 
-use gtk4 as gtk;
-use gtk::prelude::*;
 use gtk::Application;
+use gtk::prelude::*;
+use gtk4 as gtk;
 
 fn main() {
     let app = Application::builder()
@@ -13,7 +13,7 @@ fn main() {
 
     app.connect_activate(|app| {
         let windows = app.windows();
-        
+
         if let Some(window) = windows.first() {
             if window.is_visible() {
                 window.set_visible(false);

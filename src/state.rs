@@ -35,16 +35,18 @@ impl AppState {
         let initial_len = self.strokes.len();
 
         self.strokes.retain(|stroke| {
-            if stroke.points.is_empty() { return false; }
+            if stroke.points.is_empty() {
+                return false;
+            }
             if stroke.points.len() == 1 {
                 let p = &stroke.points[0];
                 return ((p.x - x).powi(2) + (p.y - y).powi(2)).sqrt() > erase_radius;
             }
-            
+
             for i in 0..(stroke.points.len() - 1) {
                 let p1 = &stroke.points[i];
-                let p2 = &stroke.points[i+1];
-                
+                let p2 = &stroke.points[i + 1];
+
                 let l2 = (p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2);
                 let dist = if l2 == 0.0 {
                     ((x - p1.x).powi(2) + (y - p1.y).powi(2)).sqrt()
@@ -57,10 +59,10 @@ impl AppState {
                 };
 
                 if dist <= erase_radius {
-                    return false; 
+                    return false;
                 }
             }
-            true 
+            true
         });
 
         initial_len != self.strokes.len()
