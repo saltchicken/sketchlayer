@@ -20,6 +20,48 @@ struct Stroke {
 struct AppState {
     strokes: Vec<Stroke>,
     current_stroke: Option<Stroke>,
+    is_erasing: bool,
+}
+
+impl AppState {
+    // Helper to check collision and remove strokes that the eraser touches
+    fn erase_at(&mut self, x: f64, y: f64) -> bool {
+        let erase_radius = 15.0; // How close the stylus needs to be to delete a line
+        let initial_len = self.strokes.len();
+
+        self.strokes.retain(|stroke| {
+            if stroke.points.is_empty() { return false; }
+            if stroke.points.len() == 1 {
+                let p = &stroke.points[0];
+                return ((p.x - x).powi(2) + (p.y - y).powi(2)).sqrt() > erase_radius;
+            }
+            
+            // Check distance from eraser to each line segment in the stroke
+            for i in 0..(stroke.points.len() - 1) {
+                let p1 = &stroke.points[i];
+                let p2 = &stroke.points[i+1];
+                
+                let l2 = (p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2);
+                let dist = if l2 == 0.0 {
+                    ((x - p1.x).powi(2) + (y - p1.y).powi(2)).sqrt()
+                } else {
+                    let mut t = ((x - p1.x) * (p2.x - p1.x) + (y - p1.y) * (p2.y - p1.y)) / l2;
+                    t = t.clamp(0.0, 1.0);
+                    let proj_x = p1.x + t * (p2.x - p1.x);
+                    let proj_y = p1.y + t * (p2.y - p1.y);
+                    ((x - proj_x).powi(2) + (y - proj_y).powi(2)).sqrt()
+                };
+
+                if dist <= erase_radius {
+                    return false; // Hit detected, remove stroke
+                }
+            }
+            true // Keep stroke
+        });
+
+        // Return true if we actually deleted something so we can queue a redraw
+        initial_len != self.strokes.len()
+    }
 }
 
 fn main() {
@@ -31,7 +73,6 @@ fn main() {
         let windows = app.windows();
         
         if let Some(window) = windows.first() {
-            // The app is already running, toggle visibility
             if window.is_visible() {
                 window.set_visible(false);
             } else {
@@ -39,7 +80,6 @@ fn main() {
                 window.present();
             }
         } else {
-            // First time launch, build the UI
             build_ui(app);
         }
     });
@@ -47,8 +87,6 @@ fn main() {
     app.run();
 }
 
-// 1. Extracted Drawing Logic
-// We moved this out of the closure so both the screen and the SVG exporter can use it.
 fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
     if stroke.points.len() < 2 { return; }
 
@@ -114,12 +152,12 @@ fn build_ui(app: &Application) {
     let state = Rc::new(RefCell::new(AppState {
         strokes: Vec::new(),
         current_stroke: None,
+        is_erasing: false,
     }));
 
     let drawing_area = DrawingArea::new();
     drawing_area.set_vexpand(true);
     drawing_area.set_hexpand(true);
-
     drawing_area.set_cursor_from_name(Some("none"));
 
     let state_draw = state.clone();
@@ -142,19 +180,42 @@ fn build_ui(app: &Application) {
 
     let stylus = GestureStylus::new();
     
+    // IMPORTANT: Listen to all buttons, not just the primary pen tip
+    stylus.set_button(0);
+    
     let state_down = state.clone();
+    let da_down = drawing_area.clone();
     stylus.connect_down(move |gesture, x, y| {
-        let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
+        let button = gesture.current_button();
+        
+        // Button 1 is the main tip. Anything else (or a dedicated eraser tool) gets mapped to erasing.
+        let is_eraser = button != 1 || gesture.device_tool().map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
+        
         let mut state = state_down.borrow_mut();
-        state.current_stroke = Some(Stroke { points: vec![Point { x, y, pressure }] });
+        
+        if is_eraser {
+            state.is_erasing = true;
+            if state.erase_at(x, y) {
+                da_down.queue_draw();
+            }
+        } else {
+            let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
+            state.is_erasing = false;
+            state.current_stroke = Some(Stroke { points: vec![Point { x, y, pressure }] });
+        }
     });
 
     let state_motion = state.clone();
     let da_motion = drawing_area.clone();
     stylus.connect_motion(move |gesture, x, y| {
-        let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
         let mut state = state_motion.borrow_mut();
-        if let Some(stroke) = &mut state.current_stroke {
+        
+        if state.is_erasing {
+            if state.erase_at(x, y) {
+                da_motion.queue_draw(); 
+            }
+        } else if let Some(stroke) = &mut state.current_stroke {
+            let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
             stroke.points.push(Point { x, y, pressure });
             da_motion.queue_draw(); 
         }
@@ -164,6 +225,8 @@ fn build_ui(app: &Application) {
     let da_up = drawing_area.clone();
     stylus.connect_up(move |_gesture, _x, _y| {
         let mut state = state_up.borrow_mut();
+        state.is_erasing = false;
+        
         if let Some(stroke) = state.current_stroke.take() {
             state.strokes.push(stroke);
             da_up.queue_draw();
@@ -188,25 +251,21 @@ fn build_ui(app: &Application) {
     window.set_anchor(Edge::Right, true);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
 
-    // 2. Add Key Controller for SVG Saving, Hiding, and Quitting
     let key_controller = EventControllerKey::new();
     let window_clone = window.clone();
     let state_save = state.clone();
     
     key_controller.connect_key_pressed(move |_ctrl, key, _keycode, modifier_state| {
-        // ESCAPE: Hide the window (keeps state in memory)
         if key == gdk::Key::Escape {
             window_clone.set_visible(false); 
             return glib::Propagation::Stop;
         }
 
-        // CTRL + Q: Actually close the app completely and drop state
         if (key == gdk::Key::q || key == gdk::Key::Q) && modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
             window_clone.close();
             return glib::Propagation::Stop;
         }
         
-        // Listen for Ctrl + S
         if (key == gdk::Key::s || key == gdk::Key::S) && modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
             let width = window_clone.width() as f64;
             let height = window_clone.height() as f64;
@@ -214,13 +273,11 @@ fn build_ui(app: &Application) {
             let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
             let filename = format!("sketchlayer_{}.svg", timestamp);
             
-            // Create a virtual Cairo surface that writes directly to an SVG file
             match gtk::cairo::SvgSurface::new(width, height, Some(&filename)) {
                 Ok(surface) => {
                     let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
                     let state = state_save.borrow();
                     
-                    // Run the exact same drawing logic on the SVG surface
                     for stroke in &state.strokes {
                         render_stroke(&cr, stroke);
                     }
@@ -229,8 +286,8 @@ fn build_ui(app: &Application) {
                         render_stroke(&cr, current);
                     }
                     
-                    surface.finish(); // Ensure the file buffer flushes
-                    println!("✅ Sketch saved to {}", filename); // Prints to terminal / Hyprland logs
+                    surface.finish();
+                    println!("✅ Sketch saved to {}", filename);
                 }
                 Err(e) => eprintln!("❌ Failed to save SVG: {:?}", e),
             }
