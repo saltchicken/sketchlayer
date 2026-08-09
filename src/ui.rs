@@ -58,10 +58,11 @@ fn setup_css() {
 }
 
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
-    drawing_area.set_draw_func(move |_area, cr, _width, _height| {
+    drawing_area.set_draw_func(move |_area, cr, width, height| {
         let state = state.borrow();
         let is_white_bg = state.white_background;
 
+        // 1. Draw Background
         if is_white_bg {
             cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
             cr.set_operator(gtk::cairo::Operator::Source);
@@ -73,12 +74,48 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         cr.paint().expect("Failed to paint background");
         cr.set_operator(gtk::cairo::Operator::Over);
 
+        // 2. Draw ALL Strokes (including erasers) FIRST
         for stroke in &state.strokes {
             render_stroke(cr, stroke.as_ref(), is_white_bg, &state.config);
         }
 
         if let Some(current) = &state.current_stroke {
             render_stroke(cr, current, is_white_bg, &state.config);
+        }
+
+        // 3. Draw Grid LAST (so it overlays everything and cannot be erased)
+        if state.show_grid {
+            let cell_w = state.config.grid_cell_width;
+            let cell_h = state.config.grid_cell_height;
+
+            if cell_w > 0.0 && cell_h > 0.0 {
+                // Ensure the operator is set back to Over just in case the last stroke was an eraser
+                cr.set_operator(gtk::cairo::Operator::Over); 
+                
+                if is_white_bg {
+                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.15); 
+                } else {
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.15);
+                }
+                
+                cr.set_line_width(1.0);
+
+                let mut x = 0.0;
+                while x < width as f64 {
+                    cr.move_to(x, 0.0);
+                    cr.line_to(x, height as f64);
+                    x += cell_w;
+                }
+
+                let mut y = 0.0;
+                while y < height as f64 {
+                    cr.move_to(0.0, y);
+                    cr.line_to(width as f64, y);
+                    y += cell_h;
+                }
+
+                cr.stroke().expect("Failed to draw grid");
+            }
         }
     });
 }

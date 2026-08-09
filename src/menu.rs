@@ -66,6 +66,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_undo = Button::with_label("Undo");
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
+    let btn_grid = Button::with_label("Toggle Grid");
 
     let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
     opacity_box.set_margin_start(4);
@@ -87,6 +88,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_undo);
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
+    menu_box.append(&btn_grid);
     menu_box.append(&opacity_box);
     menu_box.append(&btn_save);
     menu_box.append(&btn_clear);
@@ -135,6 +137,20 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             {
                 let mut s = state.borrow_mut();
                 s.white_background = !s.white_background;
+            }
+            drawing_area.queue_draw();
+            popover.popdown();
+        }
+    ));
+
+    btn_grid.connect_clicked(glib::clone!(
+        #[weak] drawing_area,
+        #[weak] popover,
+        #[strong] state,
+        move |_| {
+            {
+                let mut s = state.borrow_mut();
+                s.show_grid = !s.show_grid;
             }
             drawing_area.queue_draw();
             popover.popdown();

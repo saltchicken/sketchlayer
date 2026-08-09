@@ -10,6 +10,8 @@ pub struct Config {
     pub pen_pressure_mult: f64,
     pub base_eraser_width: f64,
     pub eraser_pressure_mult: f64,
+    pub grid_cell_width: f64,
+    pub grid_cell_height: f64,
 }
 
 impl Default for Config {
@@ -25,6 +27,8 @@ impl Default for Config {
             pen_pressure_mult: 3.0,
             base_eraser_width: 5.0,
             eraser_pressure_mult: 15.0,
+            grid_cell_width: 50.0,
+            grid_cell_height: 50.0,
         }
     }
 }

@@ -81,6 +81,7 @@ pub struct AppState {
     
     pub current_color: (f64, f64, f64),
     pub white_background: bool,
+    pub show_grid: bool,
     pub config: Config,
 }
 
@@ -99,6 +100,7 @@ impl AppState {
             
             current_color: (0.0, 0.0, 0.0),
             white_background: false,
+            show_grid: false,
             config: Config::load(),
         }))
     }
