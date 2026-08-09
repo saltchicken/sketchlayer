@@ -114,13 +114,17 @@ pub fn render_active_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
 
     let (r, g, b) = stroke.color;
     
-    // Use the pressure of the FIRST point to dictate a constant live preview width/opacity
-    let p_first = &stroke.points[0];
+    // Check the first 10 points to find the intended starting pressure.
+    // This skips the near-zero pressure of the exact millisecond of screen contact,
+    // while keeping the preview line uniform and stable.
+    let preview_pressure = stroke.points.iter()
+        .take(10)
+        .fold(0.0, |max, p| f64::max(max, p.pressure));
     
-    cr.set_line_width(1.0 + (p_first.pressure * 3.0));
-    cr.set_source_rgba(r, g, b, p_first.pressure.clamp(0.1, 1.0));
+    cr.set_line_width(1.0 + (preview_pressure * 3.0));
+    cr.set_source_rgba(r, g, b, preview_pressure.clamp(0.1, 1.0));
     
-    cr.move_to(p_first.x, p_first.y);
+    cr.move_to(stroke.points[0].x, stroke.points[0].y);
     
     // Build a single, continuous path without curves
     for p in stroke.points.iter().skip(1) {
