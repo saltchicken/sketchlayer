@@ -41,7 +41,7 @@ pub fn build_ui(app: &Application) {
     window.set_anchor(Edge::Right, true);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
 
-    setup_keyboard_events(&window, state.clone());
+    setup_keyboard_events(&window, &drawing_area, state.clone());
     window.present();
 }
 
@@ -110,19 +110,39 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     }
     menu_box.append(&color_box);
 
-    let btn_bg = Button::with_label("Toggle Background"); // NEW
+    let btn_undo = Button::with_label("Undo");
+    let btn_redo = Button::with_label("Redo");
+    let btn_bg = Button::with_label("Toggle Background");
     let btn_opacity = Button::with_label("Toggle Opacity");
     let btn_save = Button::with_label("Save Sketch");
     let btn_clear = Button::with_label("Clear Canvas");
     let btn_hide = Button::with_label("Hide Overlay");
     let btn_quit = Button::with_label("Quit");
 
+    menu_box.append(&btn_undo);
+    menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
     menu_box.append(&btn_opacity);
     menu_box.append(&btn_save);
     menu_box.append(&btn_clear);
     menu_box.append(&btn_hide);
     menu_box.append(&btn_quit);
+
+    let da_undo = drawing_area.clone();
+    let state_undo = state.clone();
+    btn_undo.connect_clicked(move |_| {
+        if state_undo.borrow_mut().undo() {
+            da_undo.queue_draw();
+        }
+    });
+
+    let da_redo = drawing_area.clone();
+    let state_redo = state.clone();
+    btn_redo.connect_clicked(move |_| {
+        if state_redo.borrow_mut().redo() {
+            da_redo.queue_draw();
+        }
+    });
 
     let da_bg = drawing_area.clone();
     let state_bg = state.clone();
@@ -281,6 +301,7 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
 
         if let Some(stroke) = state.current_stroke.take() {
             state.strokes.push(stroke);
+            state.undone_strokes.clear();
             da_up.queue_draw();
         }
     });
@@ -288,9 +309,10 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     drawing_area.add_controller(stylus);
 }
 
-fn setup_keyboard_events(window: &ApplicationWindow, state: Rc<RefCell<AppState>>) {
+fn setup_keyboard_events(window: &ApplicationWindow, drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     let key_controller = EventControllerKey::new();
     let window_clone = window.clone();
+    let da_clone = drawing_area.clone();
 
     key_controller.connect_key_pressed(move |_ctrl, key, _keycode, modifier_state| {
         if key == gdk::Key::Escape {
@@ -316,6 +338,23 @@ fn setup_keyboard_events(window: &ApplicationWindow, state: Rc<RefCell<AppState>
         {
             save_sketch(&window_clone, &state.borrow());
             return glib::Propagation::Stop;
+        }
+
+        if key == gdk::Key::z || key == gdk::Key::Z {
+            if modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
+                let mut state_mut = state.borrow_mut();
+                
+                if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
+                    if state_mut.redo() {
+                        da_clone.queue_draw();
+                    }
+                } else {
+                    if state_mut.undo() {
+                        da_clone.queue_draw();
+                    }
+                }
+                return glib::Propagation::Stop;
+            }
         }
 
         glib::Propagation::Proceed

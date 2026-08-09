@@ -16,6 +16,7 @@ pub struct Stroke {
 
 pub struct AppState {
     pub strokes: Vec<Stroke>,
+    pub undone_strokes: Vec<Stroke>,
     pub current_stroke: Option<Stroke>,
     pub is_erasing: bool,
     pub current_color: (f64, f64, f64),
@@ -27,12 +28,31 @@ impl AppState {
     pub fn new() -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             strokes: Vec::new(),
+            undone_strokes: Vec::new(),
             current_stroke: None,
             is_erasing: false,
             current_color: (0.0, 0.0, 0.0),
             white_background: false,
-            config: Config::load(), // <-- Load config on startup
+            config: Config::load(),
         }))
+    }
+    
+    pub fn undo(&mut self) -> bool {
+        if let Some(stroke) = self.strokes.pop() {
+            self.undone_strokes.push(stroke);
+            true // Indicate state changed
+        } else {
+            false
+        }
+    }
+
+    pub fn redo(&mut self) -> bool {
+        if let Some(stroke) = self.undone_strokes.pop() {
+            self.strokes.push(stroke);
+            true // Indicate state changed
+        } else {
+            false
+        }
     }
 
     pub fn erase_at(&mut self, x: f64, y: f64) -> bool {
