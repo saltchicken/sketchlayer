@@ -1,4 +1,3 @@
-// src/ui.rs
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Button, CssProvider, DrawingArea, EventControllerKey,
@@ -112,12 +111,14 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     menu_box.append(&color_box);
 
     let btn_bg = Button::with_label("Toggle Background"); // NEW
+    let btn_opacity = Button::with_label("Toggle Opacity");
     let btn_save = Button::with_label("Save Sketch");
     let btn_clear = Button::with_label("Clear Canvas");
     let btn_hide = Button::with_label("Hide Overlay");
     let btn_quit = Button::with_label("Quit");
 
     menu_box.append(&btn_bg);
+    menu_box.append(&btn_opacity);
     menu_box.append(&btn_save);
     menu_box.append(&btn_clear);
     menu_box.append(&btn_hide);
@@ -133,6 +134,20 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         }
         da_bg.queue_draw();
         pop_bg.popdown();
+    });
+
+    let da_opacity = drawing_area.clone();
+    let pop_opacity = popover.clone();
+    btn_opacity.connect_clicked(move |_| {
+        if let Some(window) = da_opacity.root().and_downcast_ref::<ApplicationWindow>() {
+            let current = window.opacity();
+            if current < 1.0 {
+                window.set_opacity(1.0);
+            } else {
+                window.set_opacity(0.5);
+            }
+        }
+        pop_opacity.popdown();
     });
 
     let da_save = drawing_area.clone();
@@ -280,6 +295,12 @@ fn setup_keyboard_events(window: &ApplicationWindow, state: Rc<RefCell<AppState>
     key_controller.connect_key_pressed(move |_ctrl, key, _keycode, modifier_state| {
         if key == gdk::Key::Escape {
             window_clone.set_visible(false);
+            return glib::Propagation::Stop;
+        }
+
+        if key == gdk::Key::o || key == gdk::Key::O {
+            let current = window_clone.opacity();
+            window_clone.set_opacity(if current < 1.0 { 1.0 } else { 0.5 });
             return glib::Propagation::Stop;
         }
 
