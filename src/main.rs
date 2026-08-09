@@ -1,6 +1,6 @@
 use gtk4 as gtk;
 use gtk::prelude::*;
-use gtk::{gdk, glib, Application, ApplicationWindow, CssProvider, DrawingArea, GestureStylus, EventControllerKey};
+use gtk::{gdk, glib, Application, ApplicationWindow, CssProvider, DrawingArea, GestureStylus, EventControllerKey, Popover, Button, Orientation};
 use gtk4_layer_shell::{Edge, Layer, LayerShell, KeyboardMode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,9 +24,8 @@ struct AppState {
 }
 
 impl AppState {
-    // Helper to check collision and remove strokes that the eraser touches
     fn erase_at(&mut self, x: f64, y: f64) -> bool {
-        let erase_radius = 15.0; // How close the stylus needs to be to delete a line
+        let erase_radius = 15.0;
         let initial_len = self.strokes.len();
 
         self.strokes.retain(|stroke| {
@@ -36,7 +35,6 @@ impl AppState {
                 return ((p.x - x).powi(2) + (p.y - y).powi(2)).sqrt() > erase_radius;
             }
             
-            // Check distance from eraser to each line segment in the stroke
             for i in 0..(stroke.points.len() - 1) {
                 let p1 = &stroke.points[i];
                 let p2 = &stroke.points[i+1];
@@ -53,14 +51,39 @@ impl AppState {
                 };
 
                 if dist <= erase_radius {
-                    return false; // Hit detected, remove stroke
+                    return false; 
                 }
             }
-            true // Keep stroke
+            true 
         });
 
-        // Return true if we actually deleted something so we can queue a redraw
         initial_len != self.strokes.len()
+    }
+}
+
+fn save_sketch(window: &ApplicationWindow, state: &AppState) {
+    let width = window.width() as f64;
+    let height = window.height() as f64;
+    
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let filename = format!("sketchlayer_{}.svg", timestamp);
+    
+    match gtk::cairo::SvgSurface::new(width, height, Some(&filename)) {
+        Ok(surface) => {
+            let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+            
+            for stroke in &state.strokes {
+                render_stroke(&cr, stroke);
+            }
+            
+            if let Some(current) = &state.current_stroke {
+                render_stroke(&cr, current);
+            }
+            
+            surface.finish();
+            println!("✅ Sketch saved to {}", filename);
+        }
+        Err(e) => eprintln!("❌ Failed to save SVG: {:?}", e),
     }
 }
 
@@ -160,6 +183,64 @@ fn build_ui(app: &Application) {
     drawing_area.set_hexpand(true);
     drawing_area.set_cursor_from_name(Some("none"));
 
+    // --- Context Menu Setup ---
+    let popover = Popover::new();
+    popover.set_parent(&drawing_area);
+    popover.set_has_arrow(true);
+
+    let menu_box = gtk::Box::new(Orientation::Vertical, 4);
+    menu_box.set_margin_top(4);
+    menu_box.set_margin_bottom(4);
+    menu_box.set_margin_start(4);
+    menu_box.set_margin_end(4);
+    popover.set_child(Some(&menu_box));
+
+    let btn_save = Button::with_label("Save Sketch");
+    let btn_clear = Button::with_label("Clear Canvas");
+    let btn_hide = Button::with_label("Hide Overlay");
+    let btn_quit = Button::with_label("Quit");
+
+    menu_box.append(&btn_save);
+    menu_box.append(&btn_clear);
+    menu_box.append(&btn_hide);
+    menu_box.append(&btn_quit);
+
+    let da_save = drawing_area.clone();
+    let state_save_menu = state.clone();
+    let pop_save = popover.clone();
+    btn_save.connect_clicked(move |_| {
+        if let Some(window) = da_save.root().and_downcast_ref::<ApplicationWindow>() {
+            save_sketch(&window, &state_save_menu.borrow());
+        }
+        pop_save.popdown();
+    });
+
+    let da_clear = drawing_area.clone();
+    let state_clear = state.clone();
+    let pop_clear = popover.clone();
+    btn_clear.connect_clicked(move |_| {
+        state_clear.borrow_mut().strokes.clear();
+        da_clear.queue_draw();
+        pop_clear.popdown();
+    });
+
+    let da_hide = drawing_area.clone();
+    let pop_hide = popover.clone();
+    btn_hide.connect_clicked(move |_| {
+        if let Some(window) = da_hide.root().and_downcast_ref::<ApplicationWindow>() {
+            window.set_visible(false);
+        }
+        pop_hide.popdown();
+    });
+
+    let da_quit = drawing_area.clone();
+    btn_quit.connect_clicked(move |_| {
+        if let Some(window) = da_quit.root().and_downcast_ref::<ApplicationWindow>() {
+            window.close();
+        }
+    });
+    // --- End Context Menu Setup ---
+
     let state_draw = state.clone();
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -179,16 +260,27 @@ fn build_ui(app: &Application) {
     });
 
     let stylus = GestureStylus::new();
-    
-    // IMPORTANT: Listen to all buttons, not just the primary pen tip
     stylus.set_button(0);
     
     let state_down = state.clone();
     let da_down = drawing_area.clone();
+    let popover_down = popover.clone();
     stylus.connect_down(move |gesture, x, y| {
         let button = gesture.current_button();
         
-        // Button 1 is the main tip. Anything else (or a dedicated eraser tool) gets mapped to erasing.
+        // Change this to button 3 to map it to your physical middle button
+        if button == 3 {
+            popover_down.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+            popover_down.popup();
+            
+            // Clean up drawing state in case it was interrupted
+            let mut state = state_down.borrow_mut();
+            state.is_erasing = false;
+            state.current_stroke = None;
+            return;
+        }
+        
+        // Button 2 (closest to tip) will now fall through to here and act as the eraser!
         let is_eraser = button != 1 || gesture.device_tool().map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
         
         let mut state = state_down.borrow_mut();
@@ -267,31 +359,7 @@ fn build_ui(app: &Application) {
         }
         
         if (key == gdk::Key::s || key == gdk::Key::S) && modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
-            let width = window_clone.width() as f64;
-            let height = window_clone.height() as f64;
-            
-            let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-            let filename = format!("sketchlayer_{}.svg", timestamp);
-            
-            match gtk::cairo::SvgSurface::new(width, height, Some(&filename)) {
-                Ok(surface) => {
-                    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
-                    let state = state_save.borrow();
-                    
-                    for stroke in &state.strokes {
-                        render_stroke(&cr, stroke);
-                    }
-                    
-                    if let Some(current) = &state.current_stroke {
-                        render_stroke(&cr, current);
-                    }
-                    
-                    surface.finish();
-                    println!("✅ Sketch saved to {}", filename);
-                }
-                Err(e) => eprintln!("❌ Failed to save SVG: {:?}", e),
-            }
-            
+            save_sketch(&window_clone, &state_save.borrow());
             return glib::Propagation::Stop;
         }
         
