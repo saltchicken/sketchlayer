@@ -266,8 +266,16 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     let popover_down = popover.clone();
     stylus.connect_down(move |gesture, x, y| {
         let button = gesture.current_button();
+        
+        // Grab the modifier state to see if any buttons are being HELD 
+        // while the tip touches down.
+        let modifiers = gesture
+            .current_event()
+            .map(|e| e.modifier_state())
+            .unwrap_or(gtk::gdk::ModifierType::empty());
 
-        if button == 3 {
+        // If right-click (button 3) is pressed, or held while the tip touches
+        if button == 3 || modifiers.contains(gtk::gdk::ModifierType::BUTTON3_MASK) {
             popover_down.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
             popover_down.popup();
 
@@ -277,7 +285,12 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
             return;
         }
 
+        // Check if a non-tip button caused the press, OR if a secondary barrel 
+        // button (like 2, 4, or 5) is being held while the tip touches down.
         let is_eraser_tool = button != 1
+            || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK)
+            || modifiers.contains(gtk::gdk::ModifierType::BUTTON4_MASK)
+            || modifiers.contains(gtk::gdk::ModifierType::BUTTON5_MASK)
             || gesture
                 .device_tool()
                 .map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
@@ -352,7 +365,6 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
                 state.redo_history.clear();
             }
         } else if let Some(stroke) = state.current_stroke.take() { // End of Draw/Pixel Erase
-            // Pixel erases behave perfectly as `Action::Draw`s in the history!
             state.history.push(crate::state::Action::Draw(stroke.clone()));
             state.strokes.push(stroke);
             state.redo_history.clear();
