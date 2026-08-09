@@ -184,8 +184,13 @@ fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     let state_clear = state.clone();
     let pop_clear = popover.clone();
     btn_clear.connect_clicked(move |_| {
-        state_clear.borrow_mut().strokes.clear();
-        da_clear.queue_draw();
+        let mut s = state_clear.borrow_mut();
+        if !s.strokes.is_empty() {
+            let strokes = std::mem::take(&mut s.strokes);
+            s.history.push(crate::state::Action::Clear(strokes));
+            s.redo_history.clear();
+            da_clear.queue_draw();
+        }
         pop_clear.popdown();
     });
 
@@ -212,7 +217,6 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
         let state = state.borrow();
 
-        // Check if we should paint a white background or clear it for transparency
         if state.white_background {
             cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
             cr.set_operator(gtk::cairo::Operator::Source);
@@ -263,14 +267,19 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
 
         if is_eraser {
             state.is_erasing = true;
+            state.current_erased.clear();
             if state.erase_at(x, y) {
                 da_down.queue_draw();
             }
         } else {
             let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
             let color = state.current_color;
+            let id = state.next_stroke_id;
+            state.next_stroke_id += 1;
+
             state.is_erasing = false;
             state.current_stroke = Some(Stroke {
+                id,
                 points: vec![Point { x, y, pressure }],
                 color,
             });
@@ -297,11 +306,18 @@ fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>,
     let da_up = drawing_area.clone();
     stylus.connect_up(move |_gesture, _x, _y| {
         let mut state = state_up.borrow_mut();
-        state.is_erasing = false;
-
-        if let Some(stroke) = state.current_stroke.take() {
+        
+        if state.is_erasing {
+            state.is_erasing = false;
+            if !state.current_erased.is_empty() {
+                let erased = std::mem::take(&mut state.current_erased);
+                state.history.push(crate::state::Action::Erase(erased));
+                state.redo_history.clear();
+            }
+        } else if let Some(stroke) = state.current_stroke.take() {
+            state.history.push(crate::state::Action::Draw(stroke.clone()));
             state.strokes.push(stroke);
-            state.undone_strokes.clear();
+            state.redo_history.clear();
             da_up.queue_draw();
         }
     });
