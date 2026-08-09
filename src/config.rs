@@ -14,8 +14,13 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        // Automatically resolves to ~/.local/share/sketchlayer on Linux
+        let default_save_path = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from(".local/share"))
+            .join("sketchlayer");
+
         Self {
-            save_dir: Some("~/Pictures/Sketches".to_string()),
+            save_dir: Some(default_save_path.to_string_lossy().into_owned()),
             base_pen_width: 1.0,
             pen_pressure_mult: 3.0,
             base_eraser_width: 5.0,
@@ -53,7 +58,15 @@ impl Config {
     }
 
     pub fn get_resolved_save_dir(&self) -> PathBuf {
-        let dir_str = self.save_dir.as_deref().unwrap_or("~/Pictures/Sketches");
+        let fallback = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from(".local/share"))
+            .join("sketchlayer");
+            
+        let dir_str = self.save_dir.as_deref().unwrap_or("");
+        
+        if dir_str.is_empty() {
+            return fallback;
+        }
         
         if dir_str.starts_with("~/") {
             if let Some(home) = dirs::home_dir() {
