@@ -41,14 +41,17 @@ impl Config {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from(".config"))
             .join("sketchlayer");
-            
+
         let config_file = config_dir.join("config.toml");
 
         if config_file.exists() {
             if let Ok(contents) = fs::read_to_string(&config_file) {
                 match toml::from_str(&contents) {
                     Ok(config) => return config,
-                    Err(e) => eprintln!("Warning: Failed to parse config.toml ({:?}). Falling back to defaults.", e),
+                    Err(e) => eprintln!(
+                        "Warning: Failed to parse config.toml ({:?}). Falling back to defaults.",
+                        e
+                    ),
                 }
             } else {
                 eprintln!("Warning: Failed to read config.toml. Falling back to defaults.");
@@ -60,7 +63,7 @@ impl Config {
                 let _ = fs::write(&config_file, toml_string);
             }
         }
-        
+
         Self::default()
     }
 
@@ -68,19 +71,19 @@ impl Config {
         let fallback = dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from(".local/share"))
             .join("sketchlayer");
-            
+
         let dir_str = self.save_dir.as_deref().unwrap_or("");
-        
+
         if dir_str.is_empty() {
             return fallback;
         }
-        
+
         if dir_str.starts_with("~/") {
             if let Some(home) = dirs::home_dir() {
                 return home.join(&dir_str[2..]);
             }
         }
-        
+
         PathBuf::from(dir_str)
     }
 }

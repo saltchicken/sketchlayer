@@ -1,34 +1,40 @@
 use gtk::prelude::*;
-use gtk::{
-    ApplicationWindow, Button, CssProvider, DrawingArea, Orientation, Popover, glib,
-};
+use gtk::{ApplicationWindow, Button, CssProvider, DrawingArea, Orientation, Popover, glib};
 use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::render::{save_sketch, save_grids};
+use crate::render::{save_grids, save_sketch};
 use crate::state::AppState;
 
-fn create_color_button(name: &str, color_val: (f64, f64, f64), state: Rc<RefCell<AppState>>) -> Button {
+fn create_color_button(
+    name: &str,
+    color_val: (f64, f64, f64),
+    state: Rc<RefCell<AppState>>,
+) -> Button {
     let btn = Button::builder().tooltip_text(name).build();
     let (r, g, b) = color_val;
-    
+
     let css = format!(
         "button {{ background: rgba({}, {}, {}, 1.0); min-width: 24px; min-height: 24px; border-radius: 12px; }}",
-        (r * 255.0) as i32, (g * 255.0) as i32, (b * 255.0) as i32
+        (r * 255.0) as i32,
+        (g * 255.0) as i32,
+        (b * 255.0) as i32
     );
 
     let provider = CssProvider::new();
     provider.load_from_data(&css);
-    btn.style_context().add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    btn.style_context()
+        .add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     btn.connect_clicked(glib::clone!(
-        #[strong] state,
+        #[strong]
+        state,
         move |_| {
             state.borrow_mut().current_color = color_val;
         }
     ));
-    
+
     btn
 }
 
@@ -98,7 +104,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_quit);
 
     btn_erase_mode.connect_clicked(glib::clone!(
-        #[strong] state,
+        #[strong]
+        state,
         move |btn| {
             let mut s = state.borrow_mut();
             if s.erase_mode == crate::state::EraseMode::Vector {
@@ -112,8 +119,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_undo.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[strong] state,
+        #[weak]
+        drawing_area,
+        #[strong]
+        state,
         move |_| {
             if state.borrow_mut().undo() {
                 drawing_area.queue_draw();
@@ -122,8 +131,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_redo.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[strong] state,
+        #[weak]
+        drawing_area,
+        #[strong]
+        state,
         move |_| {
             if state.borrow_mut().redo() {
                 drawing_area.queue_draw();
@@ -132,9 +143,12 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_bg.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[weak] popover,
-        #[strong] state,
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
         move |_| {
             {
                 let mut s = state.borrow_mut();
@@ -146,9 +160,12 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_grid.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[weak] popover,
-        #[strong] state,
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
         move |_| {
             {
                 let mut s = state.borrow_mut();
@@ -160,7 +177,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     opacity_scale.connect_value_changed(glib::clone!(
-        #[weak] drawing_area,
+        #[weak]
+        drawing_area,
         move |scale| {
             if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
                 window.set_opacity(scale.value() / 100.0);
@@ -169,9 +187,12 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_save.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[weak] popover,
-        #[strong] state,
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
                 save_sketch(&window, &state.borrow());
@@ -179,10 +200,12 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             popover.popdown();
         }
     ));
-    
+
     btn_save_grid.connect_clicked(glib::clone!(
-        #[weak] popover,
-        #[strong] state,
+        #[weak]
+        popover,
+        #[strong]
+        state,
         move |_| {
             save_grids(&state.borrow());
             popover.popdown();
@@ -190,9 +213,12 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_clear.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[weak] popover,
-        #[strong] state,
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
         move |_| {
             let mut s = state.borrow_mut();
             if !s.strokes.is_empty() {
@@ -206,8 +232,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_hide.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[weak] popover,
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
                 window.set_visible(false);
@@ -217,7 +245,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     ));
 
     btn_quit.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
+        #[weak]
+        drawing_area,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
                 window.close();

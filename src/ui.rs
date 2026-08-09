@@ -1,14 +1,12 @@
 use gtk::prelude::*;
-use gtk::{
-    Application, ApplicationWindow, CssProvider, DrawingArea, gdk,
-};
+use gtk::{Application, ApplicationWindow, CssProvider, DrawingArea, gdk};
 use gtk4 as gtk;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::events::{setup_keyboard_events, setup_stylus_events};
 use crate::menu::build_context_menu;
-use crate::events::{setup_stylus_events, setup_keyboard_events};
 use crate::render::render_stroke;
 use crate::state::AppState;
 
@@ -70,7 +68,7 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
             cr.set_operator(gtk::cairo::Operator::Clear);
         }
-        
+
         cr.paint().expect("Failed to paint background");
         cr.set_operator(gtk::cairo::Operator::Over);
 
@@ -91,26 +89,26 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             let off_y = state.config.grid_offset_y;
 
             if cell_w > 0.0 && cell_h > 0.0 {
-                cr.set_operator(gtk::cairo::Operator::Over); 
-                
+                cr.set_operator(gtk::cairo::Operator::Over);
+
                 if is_white_bg {
-                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.15); 
+                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.15);
                 } else {
                     cr.set_source_rgba(1.0, 1.0, 1.0, 0.15);
                 }
-                
+
                 cr.set_line_width(1.0);
 
                 // Calculate the starting position for the first vertical line
                 let mut start_x = off_x % cell_w;
-                if start_x < 0.0 { 
-                    start_x += cell_w; 
+                if start_x < 0.0 {
+                    start_x += cell_w;
                 }
 
                 // Calculate the starting position for the first horizontal line
                 let mut start_y = off_y % cell_h;
-                if start_y < 0.0 { 
-                    start_y += cell_h; 
+                if start_y < 0.0 {
+                    start_y += cell_h;
                 }
 
                 // Draw Vertical lines

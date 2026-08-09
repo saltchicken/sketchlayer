@@ -1,20 +1,27 @@
-use gtk4 as gtk;
 use gtk::prelude::*;
 use gtk::{ApplicationWindow, DrawingArea, EventControllerKey, GestureStylus, Popover, gdk, glib};
+use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::render::{save_sketch, save_grids};
+use crate::render::{save_grids, save_sketch};
 use crate::state::AppState;
 
-pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>, popover: Popover) {
+pub fn setup_stylus_events(
+    drawing_area: &DrawingArea,
+    state: Rc<RefCell<AppState>>,
+    popover: Popover,
+) {
     let stylus = GestureStylus::new();
     stylus.set_button(0);
 
     stylus.connect_down(glib::clone!(
-        #[strong] state,
-        #[weak] drawing_area,
-        #[weak] popover,
+        #[strong]
+        state,
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
         move |gesture, x, y| {
             let button = gesture.current_button();
             let modifiers = gesture
@@ -57,16 +64,18 @@ pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppStat
     ));
 
     stylus.connect_motion(glib::clone!(
-        #[strong] state,
-        #[weak] drawing_area,
+        #[strong]
+        state,
+        #[weak]
+        drawing_area,
         move |gesture, x, y| {
             let mut s = state.borrow_mut();
 
-            if s.is_erasing { 
+            if s.is_erasing {
                 if s.erase_at(x, y) {
                     drawing_area.queue_draw();
                 }
-            } else if s.current_stroke.is_some() { 
+            } else if s.current_stroke.is_some() {
                 let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
                 s.continue_stroke(x, y, pressure);
                 drawing_area.queue_draw();
@@ -75,19 +84,21 @@ pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppStat
     ));
 
     stylus.connect_up(glib::clone!(
-        #[strong] state,
-        #[weak] drawing_area,
+        #[strong]
+        state,
+        #[weak]
+        drawing_area,
         move |_gesture, _x, _y| {
             let mut s = state.borrow_mut();
-            
-            if s.is_erasing { 
+
+            if s.is_erasing {
                 s.is_erasing = false;
                 if !s.current_erased.is_empty() {
                     let erased = std::mem::take(&mut s.current_erased);
                     s.history.push(crate::state::Action::Erase(erased));
                     s.redo_history.clear();
                 }
-            } else if s.current_stroke.is_some() { 
+            } else if s.current_stroke.is_some() {
                 s.end_stroke();
                 drawing_area.queue_draw();
             }
@@ -97,13 +108,20 @@ pub fn setup_stylus_events(drawing_area: &DrawingArea, state: Rc<RefCell<AppStat
     drawing_area.add_controller(stylus);
 }
 
-pub fn setup_keyboard_events(window: &ApplicationWindow, drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
+pub fn setup_keyboard_events(
+    window: &ApplicationWindow,
+    drawing_area: &DrawingArea,
+    state: Rc<RefCell<AppState>>,
+) {
     let key_controller = EventControllerKey::new();
 
     key_controller.connect_key_pressed(glib::clone!(
-        #[strong] window,
-        #[strong] drawing_area,
-        #[strong] state,
+        #[strong]
+        window,
+        #[strong]
+        drawing_area,
+        #[strong]
+        state,
         move |_ctrl, key, _keycode, modifier_state| {
             if key == gdk::Key::Escape {
                 window.set_visible(false);
@@ -131,7 +149,7 @@ pub fn setup_keyboard_events(window: &ApplicationWindow, drawing_area: &DrawingA
             if key == gdk::Key::z || key == gdk::Key::Z {
                 if modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
                     let mut state_mut = state.borrow_mut();
-                    
+
                     if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
                         if state_mut.redo() {
                             drawing_area.queue_draw();

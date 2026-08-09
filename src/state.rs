@@ -1,7 +1,7 @@
+use crate::config::Config;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
-use crate::config::Config;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum EraseMode {
@@ -22,11 +22,12 @@ impl Point {
         if l2 == 0.0 {
             return ((self.x - p1.x).powi(2) + (self.y - p1.y).powi(2)).sqrt();
         }
-        
-        let t = (((self.x - p1.x) * (p2.x - p1.x) + (self.y - p1.y) * (p2.y - p1.y)) / l2).clamp(0.0, 1.0);
+
+        let t = (((self.x - p1.x) * (p2.x - p1.x) + (self.y - p1.y) * (p2.y - p1.y)) / l2)
+            .clamp(0.0, 1.0);
         let proj_x = p1.x + t * (p2.x - p1.x);
         let proj_y = p1.y + t * (p2.y - p1.y);
-        
+
         ((self.x - proj_x).powi(2) + (self.y - proj_y).powi(2)).sqrt()
     }
 }
@@ -41,7 +42,12 @@ pub struct BoundingBox {
 
 impl BoundingBox {
     pub fn new(x: f64, y: f64) -> Self {
-        Self { min_x: x, min_y: y, max_x: x, max_y: y }
+        Self {
+            min_x: x,
+            min_y: y,
+            max_x: x,
+            max_y: y,
+        }
     }
 
     pub fn expand(&mut self, x: f64, y: f64) {
@@ -58,27 +64,27 @@ pub struct Stroke {
     pub points: Vec<Point>,
     pub color: (f64, f64, f64),
     pub is_eraser: bool,
-    pub bbox: BoundingBox, 
+    pub bbox: BoundingBox,
 }
 
 #[derive(Clone)]
 pub enum Action {
-    Draw(Rc<Stroke>),            
+    Draw(Rc<Stroke>),
     Erase(Vec<Rc<Stroke>>),
     Clear(Vec<Rc<Stroke>>),
 }
 
 pub struct AppState {
     pub next_stroke_id: u64,
-    pub strokes: Vec<Rc<Stroke>>, 
+    pub strokes: Vec<Rc<Stroke>>,
     pub history: Vec<Action>,
     pub redo_history: Vec<Action>,
-    
-    pub current_stroke: Option<Stroke>, 
+
+    pub current_stroke: Option<Stroke>,
     pub current_erased: Vec<Rc<Stroke>>,
     pub is_erasing: bool,
     pub erase_mode: EraseMode,
-    
+
     pub current_color: (f64, f64, f64),
     pub white_background: bool,
     pub show_grid: bool,
@@ -92,12 +98,12 @@ impl AppState {
             strokes: Vec::new(),
             history: Vec::new(),
             redo_history: Vec::new(),
-            
+
             current_stroke: None,
             current_erased: Vec::new(),
             is_erasing: false,
             erase_mode: EraseMode::Vector,
-            
+
             current_color: (0.0, 0.0, 0.0),
             white_background: false,
             show_grid: false,
@@ -113,7 +119,11 @@ impl AppState {
         self.current_stroke = Some(Stroke {
             id,
             points: vec![Point { x, y, pressure }],
-            color: if is_eraser { (0.0, 0.0, 0.0) } else { self.current_color },
+            color: if is_eraser {
+                (0.0, 0.0, 0.0)
+            } else {
+                self.current_color
+            },
             is_eraser,
             bbox: BoundingBox::new(x, y),
         });
@@ -139,7 +149,7 @@ impl AppState {
         if let Some(action) = self.history.pop() {
             match action {
                 Action::Draw(stroke) => {
-                    self.strokes.pop(); 
+                    self.strokes.pop();
                     self.redo_history.push(Action::Draw(stroke));
                 }
                 Action::Erase(erased_strokes) => {
@@ -184,15 +194,22 @@ impl AppState {
     pub fn erase_at(&mut self, x: f64, y: f64) -> bool {
         let erase_radius = 15.0;
         let mut erased_any = false;
-        let test_point = Point { x, y, pressure: 1.0 }; 
+        let test_point = Point {
+            x,
+            y,
+            pressure: 1.0,
+        };
 
         for i in (0..self.strokes.len()).rev() {
             let stroke = &self.strokes[i];
-            
+
             // FAST FAIL: Check the bounding box first
-            if x < stroke.bbox.min_x - erase_radius || x > stroke.bbox.max_x + erase_radius ||
-               y < stroke.bbox.min_y - erase_radius || y > stroke.bbox.max_y + erase_radius {
-                continue; 
+            if x < stroke.bbox.min_x - erase_radius
+                || x > stroke.bbox.max_x + erase_radius
+                || y < stroke.bbox.min_y - erase_radius
+                || y > stroke.bbox.max_y + erase_radius
+            {
+                continue;
             }
 
             let mut hit = false;
