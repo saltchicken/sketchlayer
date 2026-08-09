@@ -153,6 +153,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             {
                 let mut s = state.borrow_mut();
                 s.white_background = !s.white_background;
+                s.needs_full_redraw = true; // Invalidate the cached surface
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -225,6 +226,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 let strokes = std::mem::take(&mut s.strokes);
                 s.history.push(crate::state::Action::Clear(strokes));
                 s.redo_history.clear();
+                s.needs_full_redraw = true; // Invalidate cache
                 drawing_area.queue_draw();
             }
             popover.popdown();

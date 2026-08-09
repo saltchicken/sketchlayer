@@ -57,26 +57,65 @@ fn setup_css() {
 
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     drawing_area.set_draw_func(move |_area, cr, width, height| {
-        let state = state.borrow();
+        let mut state = state.borrow_mut();
         let is_white_bg = state.white_background;
+        let w = width as i32;
+        let h = height as i32;
 
-        // 1. Draw Background
-        if is_white_bg {
-            cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+        let needs_rebuild = match &state.cached_surface {
+            Some(surf) => surf.width() != w || surf.height() != h || state.needs_full_redraw,
+            None => true,
+        };
+
+        if needs_rebuild {
+            // Rebuild the entire cache from scratch
+            let surf = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, w, h)
+                .expect("Failed to create ImageSurface");
+            let cache_cr = gtk::cairo::Context::new(&surf).expect("Failed to create cache context");
+
+            if is_white_bg {
+                cache_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+                cache_cr.set_operator(gtk::cairo::Operator::Source);
+            } else {
+                cache_cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+                cache_cr.set_operator(gtk::cairo::Operator::Clear);
+            }
+            cache_cr.paint().expect("Failed to paint background to cache");
+            cache_cr.set_operator(gtk::cairo::Operator::Over);
+
+            for stroke in &state.strokes {
+                render_stroke(&cache_cr, stroke.as_ref(), is_white_bg, &state.config);
+            }
+
+            state.cached_surface = Some(surf);
+            state.rendered_strokes_count = state.strokes.len();
+            state.needs_full_redraw = false;
+        } else if state.strokes.len() > state.rendered_strokes_count {
+            // Append only the newly completed strokes to the existing cache
+            if let Some(surf) = &state.cached_surface {
+                let cache_cr = gtk::cairo::Context::new(surf).expect("Failed to create cache context");
+                for i in state.rendered_strokes_count..state.strokes.len() {
+                    render_stroke(
+                        &cache_cr,
+                        state.strokes[i].as_ref(),
+                        is_white_bg,
+                        &state.config,
+                    );
+                }
+                state.rendered_strokes_count = state.strokes.len();
+            }
+        }
+
+        // 1. Draw the Cached Surface directly to the window completely overriding the background
+        if let Some(surf) = &state.cached_surface {
+            cr.set_source_surface(surf, 0.0, 0.0)
+                .expect("Failed to set source surface");
             cr.set_operator(gtk::cairo::Operator::Source);
-        } else {
-            cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-            cr.set_operator(gtk::cairo::Operator::Clear);
+            cr.paint().expect("Failed to paint cache to window");
+            cr.set_operator(gtk::cairo::Operator::Over);
         }
 
-        cr.paint().expect("Failed to paint background");
-        cr.set_operator(gtk::cairo::Operator::Over);
-
-        // 2. Draw ALL Strokes (including erasers) FIRST
-        for stroke in &state.strokes {
-            render_stroke(cr, stroke.as_ref(), is_white_bg, &state.config);
-        }
-
+        // 2. Draw the actively dragged stroke, if any
         if let Some(current) = &state.current_stroke {
             render_stroke(cr, current, is_white_bg, &state.config);
         }

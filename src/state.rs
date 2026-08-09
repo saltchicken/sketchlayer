@@ -1,4 +1,5 @@
 use crate::config::Config;
+use gtk4 as gtk;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -89,6 +90,11 @@ pub struct AppState {
     pub white_background: bool,
     pub show_grid: bool,
     pub config: Config,
+
+    // Caching for Performance
+    pub cached_surface: Option<gtk::cairo::ImageSurface>,
+    pub rendered_strokes_count: usize,
+    pub needs_full_redraw: bool,
 }
 
 impl AppState {
@@ -108,6 +114,10 @@ impl AppState {
             white_background: false,
             show_grid: false,
             config: Config::load(),
+
+            cached_surface: None,
+            rendered_strokes_count: 0,
+            needs_full_redraw: true,
         }))
     }
 
@@ -162,6 +172,7 @@ impl AppState {
                     self.redo_history.push(Action::Clear(strokes));
                 }
             }
+            self.needs_full_redraw = true;
             true
         } else {
             false
@@ -185,6 +196,7 @@ impl AppState {
                     self.history.push(Action::Clear(strokes));
                 }
             }
+            self.needs_full_redraw = true;
             true
         } else {
             false
@@ -234,6 +246,7 @@ impl AppState {
                 let removed_stroke = self.strokes.remove(i);
                 self.current_erased.push(removed_stroke);
                 erased_any = true;
+                self.needs_full_redraw = true;
             }
         }
 
