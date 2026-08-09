@@ -15,12 +15,14 @@ struct Point {
 
 struct Stroke {
     points: Vec<Point>,
+    color: (f64, f64, f64), // (R, G, B)
 }
 
 struct AppState {
     strokes: Vec<Stroke>,
     current_stroke: Option<Stroke>,
     is_erasing: bool,
+    current_color: (f64, f64, f64), // Active color
 }
 
 impl AppState {
@@ -113,12 +115,14 @@ fn main() {
 fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
     if stroke.points.len() < 2 { return; }
 
+    let (r, g, b) = stroke.color;
+
     if stroke.points.len() == 2 {
         let p1 = &stroke.points[0];
         let p2 = &stroke.points[1];
         
         cr.set_line_width(1.0 + (p1.pressure * 3.0)); 
-        cr.set_source_rgba(1.0, 1.0, 1.0, p1.pressure.clamp(0.1, 1.0));
+        cr.set_source_rgba(r, g, b, p1.pressure.clamp(0.1, 1.0));
         
         cr.move_to(p1.x, p1.y);
         cr.line_to(p2.x, p2.y);
@@ -144,7 +148,7 @@ fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
         cr.set_line_width(1.0 + (p_ctrl.pressure * 3.0));
         
         let alpha = p_ctrl.pressure.clamp(0.1, 1.0);
-        cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
+        cr.set_source_rgba(r, g, b, alpha);
 
         cr.move_to(start_x, start_y);
         cr.curve_to(cp1_x, cp1_y, cp2_x, cp2_y, end_x, end_y);
@@ -156,7 +160,7 @@ fn render_stroke(cr: &gtk::cairo::Context, stroke: &Stroke) {
 
     let p_last = &stroke.points[stroke.points.len() - 1];
     cr.set_line_width(1.0 + (p_last.pressure * 3.0));
-    cr.set_source_rgba(1.0, 1.0, 1.0, p_last.pressure.clamp(0.1, 1.0));
+    cr.set_source_rgba(r, g, b, p_last.pressure.clamp(0.1, 1.0));
     cr.move_to(start_x, start_y);
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");
@@ -176,6 +180,7 @@ fn build_ui(app: &Application) {
         strokes: Vec::new(),
         current_stroke: None,
         is_erasing: false,
+        current_color: (1.0, 1.0, 1.0), // Default to white
     }));
 
     let drawing_area = DrawingArea::new();
@@ -194,6 +199,40 @@ fn build_ui(app: &Application) {
     menu_box.set_margin_start(4);
     menu_box.set_margin_end(4);
     popover.set_child(Some(&menu_box));
+
+    // Color Palette
+    let color_box = gtk::Box::new(Orientation::Horizontal, 4);
+    color_box.set_halign(gtk::Align::Center);
+    color_box.set_margin_bottom(8);
+
+    let colors = [
+        ("White", (1.0, 1.0, 1.0)),
+        ("Red", (1.0, 0.2, 0.2)),
+        ("Green", (0.2, 1.0, 0.2)),
+        ("Blue", (0.2, 0.5, 1.0)),
+        ("Yellow", (1.0, 1.0, 0.2)),
+        ("Black", (0.0, 0.0, 0.0)),
+    ];
+
+    for (name, color_val) in colors {
+        let btn = Button::builder().tooltip_text(name).build();
+
+        // Style the button to look like a colored circle
+        let (r, g, b) = color_val;
+        let rgba_string = format!("rgba({}, {}, {}, 1.0)", (r * 255.0) as i32, (g * 255.0) as i32, (b * 255.0) as i32);
+        let css = format!("button {{ background: {}; min-width: 24px; min-height: 24px; border-radius: 12px; }}", rgba_string);
+        
+        let provider = CssProvider::new();
+        provider.load_from_data(&css);
+        btn.style_context().add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+        let state_color = state.clone();
+        btn.connect_clicked(move |_| {
+            state_color.borrow_mut().current_color = color_val;
+        });
+        color_box.append(&btn);
+    }
+    menu_box.append(&color_box);
 
     let btn_save = Button::with_label("Save Sketch");
     let btn_clear = Button::with_label("Clear Canvas");
@@ -292,8 +331,12 @@ fn build_ui(app: &Application) {
             }
         } else {
             let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
+            let color = state.current_color;
             state.is_erasing = false;
-            state.current_stroke = Some(Stroke { points: vec![Point { x, y, pressure }] });
+            state.current_stroke = Some(Stroke { 
+                points: vec![Point { x, y, pressure }],
+                color
+            });
         }
     });
 
