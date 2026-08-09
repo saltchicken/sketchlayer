@@ -87,8 +87,6 @@ pub struct AppState {
     pub erase_mode: EraseMode,
 
     pub current_color: (f64, f64, f64),
-    pub white_background: bool,
-    pub show_grid: bool,
     pub config: Config,
 
     // Caching for Performance
@@ -111,8 +109,6 @@ impl AppState {
             erase_mode: EraseMode::Vector,
 
             current_color: (0.0, 0.0, 0.0),
-            white_background: false,
-            show_grid: false,
             config: Config::load(),
 
             cached_surface: None,
@@ -215,7 +211,6 @@ impl AppState {
         for i in (0..self.strokes.len()).rev() {
             let stroke = &self.strokes[i];
 
-            // FAST FAIL: Check the bounding box first
             if x < stroke.bbox.min_x - erase_radius
                 || x > stroke.bbox.max_x + erase_radius
                 || y < stroke.bbox.min_y - erase_radius

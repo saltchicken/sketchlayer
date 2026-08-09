@@ -14,6 +14,8 @@ pub struct Config {
     pub grid_cell_height: f64,
     pub grid_offset_x: f64,
     pub grid_offset_y: f64,
+    pub show_grid: bool,
+    pub white_background: bool,
 }
 
 impl Default for Config {
@@ -32,6 +34,8 @@ impl Default for Config {
             grid_cell_height: 50.0,
             grid_offset_x: 0.0,
             grid_offset_y: 0.0,
+            show_grid: false,
+            white_background: false,
         }
     }
 }
@@ -58,13 +62,25 @@ impl Config {
             }
         } else {
             let default_config = Self::default();
-            if let Ok(toml_string) = toml::to_string(&default_config) {
-                let _ = fs::create_dir_all(&config_dir);
-                let _ = fs::write(&config_file, toml_string);
-            }
+            default_config.save();
         }
 
         Self::default()
+    }
+
+    pub fn save(&self) {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from(".config"))
+            .join("sketchlayer");
+            
+        let config_file = config_dir.join("config.toml");
+
+        if let Ok(toml_string) = toml::to_string(self) {
+            let _ = fs::create_dir_all(&config_dir);
+            if let Err(e) = fs::write(&config_file, toml_string) {
+                eprintln!("Warning: Failed to save config.toml: {:?}", e);
+            }
+        }
     }
 
     pub fn get_resolved_save_dir(&self) -> PathBuf {

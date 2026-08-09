@@ -36,7 +36,7 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
         }
     };
 
-    let is_white_bg = state.white_background;
+    let is_white_bg = state.config.white_background;
 
     match gtk::cairo::SvgSurface::new(width, height, Some(path_str)) {
         Ok(surface) => {
@@ -128,7 +128,7 @@ pub fn save_grids(state: &AppState) {
         return;
     }
 
-    let is_white_bg = state.white_background;
+    let is_white_bg = state.config.white_background;
 
     for (c, r) in active_cells {
         let cell_x = start_x + c as f64 * cell_w;

@@ -152,8 +152,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |_| {
             {
                 let mut s = state.borrow_mut();
-                s.white_background = !s.white_background;
+                s.config.white_background = !s.config.white_background;
                 s.needs_full_redraw = true; // Invalidate the cached surface
+                s.config.save();
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -170,7 +171,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |_| {
             {
                 let mut s = state.borrow_mut();
-                s.show_grid = !s.show_grid;
+                s.config.show_grid = !s.config.show_grid;
+                s.config.save();
             }
             drawing_area.queue_draw();
             popover.popdown();

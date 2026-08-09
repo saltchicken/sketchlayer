@@ -58,7 +58,7 @@ fn setup_css() {
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     drawing_area.set_draw_func(move |_area, cr, width, height| {
         let mut state = state.borrow_mut();
-        let is_white_bg = state.white_background;
+        let is_white_bg = state.config.white_background;
         let w = width as i32;
         let h = height as i32;
 
@@ -121,7 +121,7 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         }
 
         // 3. Draw Grid LAST (so it overlays everything and cannot be erased)
-        if state.show_grid {
+        if state.config.show_grid {
             let cell_w = state.config.grid_cell_width;
             let cell_h = state.config.grid_cell_height;
             let off_x = state.config.grid_offset_x;
