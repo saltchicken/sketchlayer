@@ -120,6 +120,8 @@ fn build_ui(app: &Application) {
     drawing_area.set_vexpand(true);
     drawing_area.set_hexpand(true);
 
+    drawing_area.set_cursor_from_name(Some("none"));
+
     let state_draw = state.clone();
     drawing_area.set_draw_func(move |_area, cr, _width, _height| {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -175,6 +177,8 @@ fn build_ui(app: &Application) {
         .title("Minimal Sketch")
         .child(&drawing_area)
         .build();
+
+    window.set_cursor_from_name(Some("none"));
 
     window.init_layer_shell();
     window.set_layer(Layer::Overlay);
