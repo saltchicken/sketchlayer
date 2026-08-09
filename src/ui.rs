@@ -87,9 +87,10 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         if state.show_grid {
             let cell_w = state.config.grid_cell_width;
             let cell_h = state.config.grid_cell_height;
+            let off_x = state.config.grid_offset_x;
+            let off_y = state.config.grid_offset_y;
 
             if cell_w > 0.0 && cell_h > 0.0 {
-                // Ensure the operator is set back to Over just in case the last stroke was an eraser
                 cr.set_operator(gtk::cairo::Operator::Over); 
                 
                 if is_white_bg {
@@ -100,14 +101,28 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
                 
                 cr.set_line_width(1.0);
 
-                let mut x = 0.0;
+                // Calculate the starting position for the first vertical line
+                let mut start_x = off_x % cell_w;
+                if start_x < 0.0 { 
+                    start_x += cell_w; 
+                }
+
+                // Calculate the starting position for the first horizontal line
+                let mut start_y = off_y % cell_h;
+                if start_y < 0.0 { 
+                    start_y += cell_h; 
+                }
+
+                // Draw Vertical lines
+                let mut x = start_x;
                 while x < width as f64 {
                     cr.move_to(x, 0.0);
                     cr.line_to(x, height as f64);
                     x += cell_w;
                 }
 
-                let mut y = 0.0;
+                // Draw Horizontal lines
+                let mut y = start_y;
                 while y < height as f64 {
                     cr.move_to(0.0, y);
                     cr.line_to(width as f64, y);

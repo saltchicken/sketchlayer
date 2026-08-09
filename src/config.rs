@@ -12,11 +12,12 @@ pub struct Config {
     pub eraser_pressure_mult: f64,
     pub grid_cell_width: f64,
     pub grid_cell_height: f64,
+    pub grid_offset_x: f64,
+    pub grid_offset_y: f64,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        // Automatically resolves to ~/.local/share/sketchlayer on Linux
         let default_save_path = dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from(".local/share"))
             .join("sketchlayer");
@@ -29,6 +30,8 @@ impl Default for Config {
             eraser_pressure_mult: 15.0,
             grid_cell_width: 50.0,
             grid_cell_height: 50.0,
+            grid_offset_x: 0.0,
+            grid_offset_y: 0.0,
         }
     }
 }
