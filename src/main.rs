@@ -180,7 +180,7 @@ fn build_ui(app: &Application) {
         strokes: Vec::new(),
         current_stroke: None,
         is_erasing: false,
-        current_color: (1.0, 1.0, 1.0), // Default to white
+        current_color: (0.0, 0.0, 0.0), // Default to black
     }));
 
     let drawing_area = DrawingArea::new();
