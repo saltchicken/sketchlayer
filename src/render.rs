@@ -273,7 +273,7 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
 
     let is_white_bg = state.config.white_background;
 
-    let mut surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
+    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
         Ok(surf) => surf,
         Err(e) => {
             eprintln!("❌ Failed to create surface for clipboard: {:?}", e);
@@ -302,21 +302,20 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
         render_stroke(&cr, current, is_white_bg, &state.config);
     }
 
-    // Ensure all drawing operations are finished
     surface.flush();
 
-    // Explicitly encode the image as a standard PNG in memory to ensure 
-    // universal compatibility with Wayland/X11 clipboards and target apps.
     let mut png_data = Vec::new();
     if let Err(e) = surface.write_to_png(&mut png_data) {
         eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
         return;
     }
 
-    // Wrap the PNG bytes and provide them explicitly as the "image/png" MIME type
     let bytes = gtk::glib::Bytes::from(&png_data);
     let provider = gtk::gdk::ContentProvider::for_bytes("image/png", &bytes);
 
-    window.clipboard().set_content(Some(&provider));
-    println!("✅ Sketch copied to clipboard as PNG");
+    if let Err(e) = window.clipboard().set_content(Some(&provider)) {
+        eprintln!("❌ Failed to set clipboard content: {:?}", e);
+    } else {
+        println!("✅ Sketch copied to clipboard as PNG");
+    }
 }
