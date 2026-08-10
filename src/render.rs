@@ -266,3 +266,57 @@ pub fn render_stroke(
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");
 }
+
+pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
+    let width = window.width();
+    let height = window.height();
+
+    let is_white_bg = state.config.white_background;
+
+    let mut surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
+        Ok(surf) => surf,
+        Err(e) => {
+            eprintln!("❌ Failed to create surface for clipboard: {:?}", e);
+            return;
+        }
+    };
+
+    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+
+    if is_white_bg {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+        cr.set_operator(gtk::cairo::Operator::Source);
+        cr.paint().expect("Failed to paint background");
+    } else {
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+        cr.set_operator(gtk::cairo::Operator::Clear);
+        cr.paint().expect("Failed to paint background");
+    }
+    cr.set_operator(gtk::cairo::Operator::Over);
+
+    for stroke in &state.strokes {
+        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+    }
+
+    if let Some(current) = &state.current_stroke {
+        render_stroke(&cr, current, is_white_bg, &state.config);
+    }
+
+    // Ensure all drawing operations are finished
+    surface.flush();
+
+    // Explicitly encode the image as a standard PNG in memory to ensure 
+    // universal compatibility with Wayland/X11 clipboards and target apps.
+    let mut png_data = Vec::new();
+    if let Err(e) = surface.write_to_png(&mut png_data) {
+        eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
+        return;
+    }
+
+    // Wrap the PNG bytes and provide them explicitly as the "image/png" MIME type
+    let bytes = gtk::glib::Bytes::from(&png_data);
+    let provider = gtk::gdk::ContentProvider::for_bytes("image/png", &bytes);
+
+    window.clipboard().set_content(Some(&provider));
+    println!("✅ Sketch copied to clipboard as PNG");
+}
