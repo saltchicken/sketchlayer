@@ -4,7 +4,7 @@ use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::render::{copy_to_clipboard, save_grids, save_sketch};
+use crate::render::{copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_sketch};
 use crate::state::AppState;
 
 pub fn setup_stylus_events(
@@ -149,7 +149,11 @@ pub fn setup_keyboard_events(
             if (key == gdk::Key::c || key == gdk::Key::C)
                 && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
             {
-                copy_to_clipboard(&window, &state.borrow());
+                if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
+                    copy_main_grid_to_clipboard(&window, &state.borrow());
+                } else {
+                    copy_to_clipboard(&window, &state.borrow());
+                }
                 return glib::Propagation::Stop;
             }
 

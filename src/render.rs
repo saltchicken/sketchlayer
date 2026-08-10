@@ -319,3 +319,89 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
         println!("✅ Sketch copied to clipboard as PNG");
     }
 }
+
+pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState) {
+    let cell_w = state.config.grid_cell_width;
+    let cell_h = state.config.grid_cell_height;
+
+    if cell_w <= 0.0 || cell_h <= 0.0 {
+        eprintln!("❌ Invalid grid dimensions");
+        return;
+    }
+
+    // 1. Calculate grid alignment (mirroring your save_grids logic)
+    let mut start_x = state.config.grid_offset_x % cell_w;
+    if start_x < 0.0 {
+        start_x += cell_w;
+    }
+    let mut start_y = state.config.grid_offset_y % cell_h;
+    if start_y < 0.0 {
+        start_y += cell_h;
+    }
+
+    // 2. Find the center of your screen/window
+    let center_x = window.width() as f64 / 2.0;
+    let center_y = window.height() as f64 / 2.0;
+
+    // 3. Determine which grid column (c) and row (r) that center point falls into
+    let c = ((center_x - start_x) / cell_w).floor() as i32;
+    let r = ((center_y - start_y) / cell_h).floor() as i32;
+
+    // 4. Calculate the top-left pixel coordinates of this specific cell
+    let main_x = start_x + c as f64 * cell_w;
+    let main_y = start_y + r as f64 * cell_h;
+
+    let is_white_bg = state.config.white_background;
+
+    // 5. Create a surface exactly the size of your grid cell
+    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, cell_w as i32, cell_h as i32) {
+        Ok(surf) => surf,
+        Err(e) => {
+            eprintln!("❌ Failed to create surface for clipboard: {:?}", e);
+            return;
+        }
+    };
+
+    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+
+    // 6. Shift the canvas so the top-left of the main cell becomes (0,0)
+    cr.translate(-main_x, -main_y);
+
+    if is_white_bg {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+        cr.set_operator(gtk::cairo::Operator::Source);
+        cr.paint().expect("Failed to paint background");
+        cr.set_operator(gtk::cairo::Operator::Over);
+    } else {
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+        cr.set_operator(gtk::cairo::Operator::Clear);
+        cr.paint().expect("Failed to paint background");
+        cr.set_operator(gtk::cairo::Operator::Over);
+    }
+
+    // 7. Render strokes (Cairo automatically clips anything outside the bounds)
+    for stroke in &state.strokes {
+        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+    }
+
+    if let Some(current) = &state.current_stroke {
+        render_stroke(&cr, current, is_white_bg, &state.config);
+    }
+
+    surface.flush();
+
+    let mut png_data = Vec::new();
+    if let Err(e) = surface.write_to_png(&mut png_data) {
+        eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
+        return;
+    }
+
+    let bytes = gtk::glib::Bytes::from(&png_data);
+    let provider = gtk::gdk::ContentProvider::for_bytes("image/png", &bytes);
+
+    if let Err(e) = window.clipboard().set_content(Some(&provider)) {
+        eprintln!("❌ Failed to set clipboard content: {:?}", e);
+    } else {
+        println!("✅ Main Grid ({}, {}) copied to clipboard as PNG", c, r);
+    }
+}
