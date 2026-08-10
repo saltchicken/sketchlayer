@@ -72,7 +72,7 @@ impl Config {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from(".config"))
             .join("sketchlayer");
-            
+
         let config_file = config_dir.join("config.toml");
 
         if let Ok(toml_string) = toml::to_string(self) {

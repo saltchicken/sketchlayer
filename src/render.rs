@@ -273,7 +273,8 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
 
     let is_white_bg = state.config.white_background;
 
-    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
+    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height)
+    {
         Ok(surf) => surf,
         Err(e) => {
             eprintln!("❌ Failed to create surface for clipboard: {:?}", e);
@@ -354,7 +355,11 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     let is_white_bg = state.config.white_background;
 
     // 5. Create a surface exactly the size of your grid cell
-    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, cell_w as i32, cell_h as i32) {
+    let surface = match gtk::cairo::ImageSurface::create(
+        gtk::cairo::Format::ARgb32,
+        cell_w as i32,
+        cell_h as i32,
+    ) {
         Ok(surf) => surf,
         Err(e) => {
             eprintln!("❌ Failed to create surface for clipboard: {:?}", e);

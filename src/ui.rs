@@ -80,7 +80,9 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
                 cache_cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
                 cache_cr.set_operator(gtk::cairo::Operator::Clear);
             }
-            cache_cr.paint().expect("Failed to paint background to cache");
+            cache_cr
+                .paint()
+                .expect("Failed to paint background to cache");
             cache_cr.set_operator(gtk::cairo::Operator::Over);
 
             for stroke in &state.strokes {
@@ -93,7 +95,8 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         } else if state.strokes.len() > state.rendered_strokes_count {
             // Append only the newly completed strokes to the existing cache
             if let Some(surf) = &state.cached_surface {
-                let cache_cr = gtk::cairo::Context::new(surf).expect("Failed to create cache context");
+                let cache_cr =
+                    gtk::cairo::Context::new(surf).expect("Failed to create cache context");
                 for i in state.rendered_strokes_count..state.strokes.len() {
                     render_stroke(
                         &cache_cr,
