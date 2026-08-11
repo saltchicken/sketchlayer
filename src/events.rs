@@ -49,16 +49,17 @@ pub fn setup_stylus_events(
 
             let mut state = state.borrow_mut();
             let erase_mode = state.erase_mode;
+            let (cx, cy) = state.screen_to_canvas(x, y);
 
             if is_eraser_tool && erase_mode == crate::state::EraseMode::Vector {
                 state.is_erasing = true;
                 state.current_erased.clear();
-                if state.erase_at(x, y) {
+                if state.erase_at(cx, cy) {
                     drawing_area.queue_draw();
                 }
             } else {
                 let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                state.start_stroke(x, y, pressure, is_eraser_tool);
+                state.start_stroke(cx, cy, pressure, is_eraser_tool);
             }
         }
     ));
@@ -70,14 +71,15 @@ pub fn setup_stylus_events(
         drawing_area,
         move |gesture, x, y| {
             let mut s = state.borrow_mut();
+            let (cx, cy) = s.screen_to_canvas(x, y);
 
             if s.is_erasing {
-                if s.erase_at(x, y) {
+                if s.erase_at(cx, cy) {
                     drawing_area.queue_draw();
                 }
             } else if s.current_stroke.is_some() {
                 let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                s.continue_stroke(x, y, pressure);
+                s.continue_stroke(cx, cy, pressure);
                 drawing_area.queue_draw();
             }
         }
@@ -106,6 +108,63 @@ pub fn setup_stylus_events(
     ));
 
     drawing_area.add_controller(stylus);
+}
+
+pub fn setup_view_events(
+    drawing_area: &DrawingArea,
+    state: Rc<RefCell<AppState>>,
+) {
+    let scroll_controller = gtk::EventControllerScroll::new(
+        gtk::EventControllerScrollFlags::VERTICAL | gtk::EventControllerScrollFlags::HORIZONTAL,
+    );
+
+    // Explicitly manually downgrade the widget to a WeakRef
+    let weak_da = drawing_area.downgrade();
+
+    scroll_controller.connect_scroll(glib::clone!(
+        #[strong] state,
+        move |controller, dx, dy| {
+            // Explicitly upgrade the WeakRef, with a fallback return value
+            let Some(drawing_area) = weak_da.upgrade() else {
+                return glib::Propagation::Proceed;
+            };
+
+            let mut s = state.borrow_mut();
+            
+            let (focal_x, focal_y) = if let Some(event) = controller.current_event() {
+                event.position().unwrap_or((drawing_area.width() as f64 / 2.0, drawing_area.height() as f64 / 2.0))
+            } else {
+                (drawing_area.width() as f64 / 2.0, drawing_area.height() as f64 / 2.0)
+            };
+
+            let modifiers = controller.current_event_state();
+            
+            if modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
+                // Ctrl = Zoom
+                // Combine dx and dy so zoom works regardless of scroll wheel direction mapping
+                let amount = dx + dy; 
+                if amount != 0.0 {
+                    let zoom_factor = if amount > 0.0 { 0.9 } else { 1.1 };
+                    let new_zoom = s.zoom * zoom_factor;
+                    s.set_zoom(new_zoom, focal_x, focal_y);
+                }
+            } else if modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) {
+                // Shift = Pan Horizontally
+                // Summing dx and dy catches both raw vertical wheels and OS-translated horizontal scrolls
+                s.offset_x -= (dx + dy) * 20.0;
+                s.needs_full_redraw = true;
+            } else {
+                // No modifiers = 2D Pan (Vertical wheel pans Y, Trackpad pans both)
+                s.offset_x -= dx * 20.0;
+                s.offset_y -= dy * 20.0;
+                s.needs_full_redraw = true;
+            }
+            drawing_area.queue_draw();
+            glib::Propagation::Stop
+        }
+    ));
+
+    drawing_area.add_controller(scroll_controller);
 }
 
 pub fn setup_keyboard_events(

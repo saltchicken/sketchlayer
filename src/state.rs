@@ -89,6 +89,11 @@ pub struct AppState {
     pub current_color: (f64, f64, f64),
     pub config: Config,
 
+    // View Transformation
+    pub zoom: f64,
+    pub offset_x: f64,
+    pub offset_y: f64,
+
     // Caching for Performance
     pub cached_surface: Option<gtk::cairo::ImageSurface>,
     pub rendered_strokes_count: usize,
@@ -111,10 +116,29 @@ impl AppState {
             current_color: (0.0, 0.0, 0.0),
             config: Config::load(),
 
+            zoom: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+
             cached_surface: None,
             rendered_strokes_count: 0,
             needs_full_redraw: true,
         }))
+    }
+
+    pub fn screen_to_canvas(&self, x: f64, y: f64) -> (f64, f64) {
+        ((x - self.offset_x) / self.zoom, (y - self.offset_y) / self.zoom)
+    }
+
+    pub fn set_zoom(&mut self, new_zoom: f64, focal_x: f64, focal_y: f64) {
+        let (canvas_x, canvas_y) = self.screen_to_canvas(focal_x, focal_y);
+        
+        self.zoom = new_zoom.clamp(0.1, 10.0);
+        
+        self.offset_x = focal_x - canvas_x * self.zoom;
+        self.offset_y = focal_y - canvas_y * self.zoom;
+        
+        self.needs_full_redraw = true;
     }
 
     pub fn start_stroke(&mut self, x: f64, y: f64, pressure: f64, is_eraser: bool) {
@@ -200,7 +224,7 @@ impl AppState {
     }
 
     pub fn erase_at(&mut self, x: f64, y: f64) -> bool {
-        let erase_radius = 15.0;
+        let erase_radius = 15.0; // In canvas coordinates now
         let mut erased_any = false;
         let test_point = Point {
             x,

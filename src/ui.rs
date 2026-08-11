@@ -5,7 +5,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::events::{setup_keyboard_events, setup_stylus_events};
+use crate::events::{setup_keyboard_events, setup_stylus_events, setup_view_events};
 use crate::menu::build_context_menu;
 use crate::render::render_stroke;
 use crate::state::AppState;
@@ -24,6 +24,7 @@ pub fn build_ui(app: &Application) {
 
     setup_drawing_area(&drawing_area, state.clone());
     setup_stylus_events(&drawing_area, state.clone(), popover);
+    setup_view_events(&drawing_area, state.clone());
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -68,7 +69,6 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         };
 
         if needs_rebuild {
-            // Rebuild the entire cache from scratch
             let surf = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, w, h)
                 .expect("Failed to create ImageSurface");
             let cache_cr = gtk::cairo::Context::new(&surf).expect("Failed to create cache context");
@@ -85,6 +85,9 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
                 .expect("Failed to paint background to cache");
             cache_cr.set_operator(gtk::cairo::Operator::Over);
 
+            cache_cr.translate(state.offset_x, state.offset_y);
+            cache_cr.scale(state.zoom, state.zoom);
+
             for stroke in &state.strokes {
                 render_stroke(&cache_cr, stroke.as_ref(), is_white_bg, &state.config);
             }
@@ -93,10 +96,13 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             state.rendered_strokes_count = state.strokes.len();
             state.needs_full_redraw = false;
         } else if state.strokes.len() > state.rendered_strokes_count {
-            // Append only the newly completed strokes to the existing cache
             if let Some(surf) = &state.cached_surface {
                 let cache_cr =
                     gtk::cairo::Context::new(surf).expect("Failed to create cache context");
+                
+                cache_cr.translate(state.offset_x, state.offset_y);
+                cache_cr.scale(state.zoom, state.zoom);
+                
                 for i in state.rendered_strokes_count..state.strokes.len() {
                     render_stroke(
                         &cache_cr,
@@ -109,7 +115,6 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             }
         }
 
-        // 1. Draw the Cached Surface directly to the window completely overriding the background
         if let Some(surf) = &state.cached_surface {
             cr.set_source_surface(surf, 0.0, 0.0)
                 .expect("Failed to set source surface");
@@ -118,12 +123,14 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             cr.set_operator(gtk::cairo::Operator::Over);
         }
 
-        // 2. Draw the actively dragged stroke, if any
+        cr.save().expect("Failed to save cairo state");
+        cr.translate(state.offset_x, state.offset_y);
+        cr.scale(state.zoom, state.zoom);
+
         if let Some(current) = &state.current_stroke {
             render_stroke(cr, current, is_white_bg, &state.config);
         }
 
-        // 3. Draw Grid LAST (so it overlays everything and cannot be erased)
         if state.config.show_grid {
             let cell_w = state.config.grid_cell_width;
             let cell_h = state.config.grid_cell_height;
@@ -139,38 +146,32 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
                     cr.set_source_rgba(1.0, 1.0, 1.0, 0.15);
                 }
 
-                cr.set_line_width(1.0);
+                cr.set_line_width(1.0 / state.zoom);
 
-                // Calculate the starting position for the first vertical line
-                let mut start_x = off_x % cell_w;
-                if start_x < 0.0 {
-                    start_x += cell_w;
-                }
+                let (min_cx, min_cy) = state.screen_to_canvas(0.0, 0.0);
+                let (max_cx, max_cy) = state.screen_to_canvas(width as f64, height as f64);
 
-                // Calculate the starting position for the first horizontal line
-                let mut start_y = off_y % cell_h;
-                if start_y < 0.0 {
-                    start_y += cell_h;
-                }
+                let start_x = off_x + ((min_cx - off_x) / cell_w).floor() * cell_w;
+                let start_y = off_y + ((min_cy - off_y) / cell_h).floor() * cell_h;
 
-                // Draw Vertical lines
                 let mut x = start_x;
-                while x < width as f64 {
-                    cr.move_to(x, 0.0);
-                    cr.line_to(x, height as f64);
+                while x <= max_cx {
+                    cr.move_to(x, min_cy);
+                    cr.line_to(x, max_cy);
                     x += cell_w;
                 }
 
-                // Draw Horizontal lines
                 let mut y = start_y;
-                while y < height as f64 {
-                    cr.move_to(0.0, y);
-                    cr.line_to(width as f64, y);
+                while y <= max_cy {
+                    cr.move_to(min_cx, y);
+                    cr.line_to(max_cx, y);
                     y += cell_h;
                 }
 
                 cr.stroke().expect("Failed to draw grid");
             }
         }
+        
+        cr.restore().expect("Failed to restore cairo state");
     });
 }
