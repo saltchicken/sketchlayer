@@ -75,6 +75,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
     let btn_grid = Button::with_label("Toggle Grid");
+    let btn_reset_view = Button::with_label("Reset View");
 
     let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
     opacity_box.set_margin_start(4);
@@ -88,7 +89,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     opacity_box.append(&opacity_scale);
 
     let btn_save = Button::with_label("Save Full Sketch (SVG)");
-    let btn_save_png = Button::with_label("Save Full Sketch (PNG)"); // <-- Add this
+    let btn_save_png = Button::with_label("Save Full Sketch (PNG)");
     let btn_save_grid = Button::with_label("Save Grid Cells");
     let btn_copy = Button::with_label("Copy Full Screen");
     let btn_copy_main = Button::with_label("Copy Main Grid");
@@ -101,9 +102,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
     menu_box.append(&btn_grid);
+    menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
     menu_box.append(&btn_save);
-    menu_box.append(&btn_save_png); // <-- Append it here
+    menu_box.append(&btn_save_png);
     menu_box.append(&btn_save_grid);
     menu_box.append(&btn_copy);
     menu_box.append(&btn_copy_main);
@@ -182,6 +184,20 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 s.config.show_grid = !s.config.show_grid;
                 s.config.save();
             }
+            drawing_area.queue_draw();
+            popover.popdown();
+        }
+    ));
+
+    btn_reset_view.connect_clicked(glib::clone!(
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
+        move |_| {
+            state.borrow_mut().reset_view();
             drawing_area.queue_draw();
             popover.popdown();
         }

@@ -1,4 +1,3 @@
-// src/events.rs
 use gtk::prelude::*;
 use gtk::{ApplicationWindow, DrawingArea, EventControllerKey, GestureDrag, GestureStylus, Popover, gdk, glib};
 use gtk4 as gtk;
@@ -242,6 +241,14 @@ pub fn setup_keyboard_events(
                 } else {
                     copy_to_clipboard(&window, &state.borrow());
                 }
+                return glib::Propagation::Stop;
+            }
+
+            if (key == gdk::Key::_0 || key == gdk::Key::KP_0)
+                && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
+            {
+                state.borrow_mut().reset_view();
+                drawing_area.queue_draw();
                 return glib::Propagation::Stop;
             }
 

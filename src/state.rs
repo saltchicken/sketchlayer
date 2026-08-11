@@ -141,6 +141,13 @@ impl AppState {
         self.needs_full_redraw = true;
     }
 
+    pub fn reset_view(&mut self) {
+        self.zoom = 1.0;
+        self.offset_x = 0.0;
+        self.offset_y = 0.0;
+        self.needs_full_redraw = true;
+    }
+
     pub fn start_stroke(&mut self, x: f64, y: f64, pressure: f64, is_eraser: bool) {
         self.is_erasing = false;
         let id = self.next_stroke_id;
