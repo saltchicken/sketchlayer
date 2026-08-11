@@ -57,6 +57,77 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     }
 }
 
+pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
+    let width = window.width();
+    let height = window.height();
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let save_dir = state.config.get_resolved_save_dir();
+
+    if !save_dir.exists() {
+        if let Err(e) = fs::create_dir_all(&save_dir) {
+            eprintln!("❌ Failed to create save directory: {:?}", e);
+            return;
+        }
+    }
+
+    let filename = format!("sketchlayer_{}.png", timestamp);
+    let full_path = save_dir.join(&filename);
+
+    let is_white_bg = state.config.white_background;
+
+    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
+        Ok(surf) => surf,
+        Err(e) => {
+            eprintln!("❌ Failed to create surface for PNG: {:?}", e);
+            return;
+        }
+    };
+
+    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+
+    if is_white_bg {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+        cr.set_operator(gtk::cairo::Operator::Source);
+        cr.paint().expect("Failed to paint background");
+    } else {
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+        cr.set_operator(gtk::cairo::Operator::Clear);
+        cr.paint().expect("Failed to paint background");
+    }
+    cr.set_operator(gtk::cairo::Operator::Over);
+
+    // Render all strokes
+    for stroke in &state.strokes {
+        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+    }
+
+    // Render active stroke if currently drawing
+    if let Some(current) = &state.current_stroke {
+        render_stroke(&cr, current, is_white_bg, &state.config);
+    }
+
+    surface.flush();
+
+    let mut file = match fs::File::create(&full_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("❌ Failed to create PNG file: {:?}", e);
+            return;
+        }
+    };
+
+    if let Err(e) = surface.write_to_png(&mut file) {
+        eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
+    } else {
+        println!("✅ Sketch saved to {}", full_path.display());
+    }
+}
+
 pub fn save_grids(state: &AppState) {
     let cell_w = state.config.grid_cell_width;
     let cell_h = state.config.grid_cell_height;

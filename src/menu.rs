@@ -4,7 +4,9 @@ use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::render::{copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_sketch};
+use crate::render::{
+    copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_sketch, save_sketch_png
+};
 use crate::state::AppState;
 
 fn create_color_button(
@@ -85,7 +87,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     opacity_box.append(&opacity_label);
     opacity_box.append(&opacity_scale);
 
-    let btn_save = Button::with_label("Save Full Sketch");
+    let btn_save = Button::with_label("Save Full Sketch (SVG)");
+    let btn_save_png = Button::with_label("Save Full Sketch (PNG)"); // <-- Add this
     let btn_save_grid = Button::with_label("Save Grid Cells");
     let btn_copy = Button::with_label("Copy Full Screen");
     let btn_copy_main = Button::with_label("Copy Main Grid");
@@ -100,6 +103,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_grid);
     menu_box.append(&opacity_box);
     menu_box.append(&btn_save);
+    menu_box.append(&btn_save_png); // <-- Append it here
     menu_box.append(&btn_save_grid);
     menu_box.append(&btn_copy);
     menu_box.append(&btn_copy_main);
@@ -203,6 +207,21 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
                 save_sketch(&window, &state.borrow());
+            }
+            popover.popdown();
+        }
+    ));
+
+    btn_save_png.connect_clicked(glib::clone!(
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
+        move |_| {
+            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
+                save_sketch_png(&window, &state.borrow());
             }
             popover.popdown();
         }
