@@ -1,5 +1,6 @@
+// src/events.rs
 use gtk::prelude::*;
-use gtk::{ApplicationWindow, DrawingArea, EventControllerKey, GestureStylus, Popover, gdk, glib};
+use gtk::{ApplicationWindow, DrawingArea, EventControllerKey, GestureDrag, GestureStylus, Popover, gdk, glib};
 use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -39,8 +40,12 @@ pub fn setup_stylus_events(
                 return;
             }
 
+            // Ignore middle button so the panning gesture can handle it
+            if button == 2 || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK) {
+                return;
+            }
+
             let is_eraser_tool = button != 1
-                || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK)
                 || modifiers.contains(gtk::gdk::ModifierType::BUTTON4_MASK)
                 || modifiers.contains(gtk::gdk::ModifierType::BUTTON5_MASK)
                 || gesture
@@ -114,17 +119,16 @@ pub fn setup_view_events(
     drawing_area: &DrawingArea,
     state: Rc<RefCell<AppState>>,
 ) {
+    // --- SCROLL WHEEL = ZOOM ---
     let scroll_controller = gtk::EventControllerScroll::new(
         gtk::EventControllerScrollFlags::VERTICAL | gtk::EventControllerScrollFlags::HORIZONTAL,
     );
 
-    // Explicitly manually downgrade the widget to a WeakRef
     let weak_da = drawing_area.downgrade();
 
     scroll_controller.connect_scroll(glib::clone!(
         #[strong] state,
         move |controller, dx, dy| {
-            // Explicitly upgrade the WeakRef, with a fallback return value
             let Some(drawing_area) = weak_da.upgrade() else {
                 return glib::Propagation::Proceed;
             };
@@ -137,34 +141,59 @@ pub fn setup_view_events(
                 (drawing_area.width() as f64 / 2.0, drawing_area.height() as f64 / 2.0)
             };
 
-            let modifiers = controller.current_event_state();
-            
-            if modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
-                // Ctrl = Zoom
-                // Combine dx and dy so zoom works regardless of scroll wheel direction mapping
-                let amount = dx + dy; 
-                if amount != 0.0 {
-                    let zoom_factor = if amount > 0.0 { 0.9 } else { 1.1 };
-                    let new_zoom = s.zoom * zoom_factor;
-                    s.set_zoom(new_zoom, focal_x, focal_y);
-                }
-            } else if modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) {
-                // Shift = Pan Horizontally
-                // Summing dx and dy catches both raw vertical wheels and OS-translated horizontal scrolls
-                s.offset_x -= (dx + dy) * 20.0;
-                s.needs_full_redraw = true;
-            } else {
-                // No modifiers = 2D Pan (Vertical wheel pans Y, Trackpad pans both)
-                s.offset_x -= dx * 20.0;
-                s.offset_y -= dy * 20.0;
-                s.needs_full_redraw = true;
+            // Combine dx and dy so zoom works regardless of scroll wheel direction mapping
+            let amount = dx + dy; 
+            if amount != 0.0 {
+                let zoom_factor = if amount > 0.0 { 0.9 } else { 1.1 };
+                let new_zoom = s.zoom * zoom_factor;
+                s.set_zoom(new_zoom, focal_x, focal_y);
             }
+
             drawing_area.queue_draw();
             glib::Propagation::Stop
         }
     ));
 
     drawing_area.add_controller(scroll_controller);
+
+    // --- MIDDLE CLICK = PAN ---
+    let drag_controller = GestureDrag::new();
+    drag_controller.set_button(2); // Button 2 is the Middle Mouse Button
+
+    let pan_start = Rc::new(RefCell::new((0.0, 0.0)));
+
+    drag_controller.connect_drag_begin(glib::clone!(
+        #[strong] state,
+        #[strong] pan_start,
+        move |_gesture, _start_x, _start_y| {
+            let s = state.borrow();
+            // Store the initial canvas offset when the drag starts
+            *pan_start.borrow_mut() = (s.offset_x, s.offset_y);
+        }
+    ));
+
+    let weak_da_drag = drawing_area.downgrade();
+    drag_controller.connect_drag_update(glib::clone!(
+        #[strong] state,
+        #[strong] pan_start,
+        move |_gesture, offset_x, offset_y| {
+            let Some(drawing_area) = weak_da_drag.upgrade() else {
+                return;
+            };
+            
+            let mut s = state.borrow_mut();
+            let start = *pan_start.borrow();
+            
+            // Add the drag offset to the original canvas offset
+            s.offset_x = start.0 + offset_x;
+            s.offset_y = start.1 + offset_y;
+            s.needs_full_redraw = true;
+            
+            drawing_area.queue_draw();
+        }
+    ));
+
+    drawing_area.add_controller(drag_controller);
 }
 
 pub fn setup_keyboard_events(
