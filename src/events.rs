@@ -29,6 +29,7 @@ pub fn setup_stylus_events(
                 .map(|e| e.modifier_state())
                 .unwrap_or(gtk::gdk::ModifierType::empty());
 
+            // Button 3 (Usually lower barrel / right-click) -> Context Menu
             if button == 3 || modifiers.contains(gtk::gdk::ModifierType::BUTTON3_MASK) {
                 popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
                 popover.popup();
@@ -39,13 +40,9 @@ pub fn setup_stylus_events(
                 return;
             }
 
-            // Ignore middle button so the panning gesture can handle it
-            if button == 2 || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK) {
-                return;
-            }
-
-            let is_eraser_tool = button != 1
-                || modifiers.contains(gtk::gdk::ModifierType::BUTTON4_MASK)
+            // Button 2 (Usually upper barrel / middle-click) -> Eraser
+            let is_eraser_tool = button == 2
+                || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK)
                 || modifiers.contains(gtk::gdk::ModifierType::BUTTON5_MASK)
                 || gesture
                     .device_tool()
@@ -164,7 +161,13 @@ pub fn setup_view_events(
     drag_controller.connect_drag_begin(glib::clone!(
         #[strong] state,
         #[strong] pan_start,
-        move |_gesture, _start_x, _start_y| {
+        move |gesture, _start_x, _start_y| {
+            // Ignore panning requests if the device is a stylus (which frees button 2 for the eraser)
+            if gesture.current_event().and_then(|e| e.device_tool()).is_some() {
+                gesture.set_state(gtk::EventSequenceState::Denied);
+                return;
+            }
+
             let s = state.borrow();
             // Store the initial canvas offset when the drag starts
             *pan_start.borrow_mut() = (s.offset_x, s.offset_y);
@@ -175,7 +178,12 @@ pub fn setup_view_events(
     drag_controller.connect_drag_update(glib::clone!(
         #[strong] state,
         #[strong] pan_start,
-        move |_gesture, offset_x, offset_y| {
+        move |gesture, offset_x, offset_y| {
+            // Ignore updates if a stylus is being used
+            if gesture.current_event().and_then(|e| e.device_tool()).is_some() {
+                return;
+            }
+
             let Some(drawing_area) = weak_da_drag.upgrade() else {
                 return;
             };
