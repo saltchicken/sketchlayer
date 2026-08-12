@@ -35,15 +35,19 @@ pub fn build_ui(app: &Application) {
     window.set_cursor_from_name(Some("none"));
     window.init_layer_shell();
 
-    // Bind layer shell specifically to the HDMI-A-2 monitor
-    let display = gdk::Display::default().expect("Could not connect to a display.");
-    let monitors = display.monitors();
-    for i in 0..monitors.n_items() {
-        if let Some(monitor) = monitors.item(i).and_downcast::<gdk::Monitor>() {
-            if let Some(connector) = monitor.connector() {
-                if connector.as_str() == "HDMI-A-2" {
-                    window.set_monitor(Some(&monitor));
-                    break;
+    // Check config for a targeted monitor, otherwise default to focused monitor
+    if let Some(target) = &state.borrow().config.target_monitor {
+        if !target.is_empty() {
+            let display = gdk::Display::default().expect("Could not connect to a display.");
+            let monitors = display.monitors();
+            for i in 0..monitors.n_items() {
+                if let Some(monitor) = monitors.item(i).and_downcast::<gdk::Monitor>() {
+                    if let Some(connector) = monitor.connector() {
+                        if connector.as_str() == target {
+                            window.set_monitor(Some(&monitor));
+                            break;
+                        }
+                    }
                 }
             }
         }

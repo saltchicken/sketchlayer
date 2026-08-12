@@ -16,6 +16,7 @@ pub struct Config {
     pub grid_offset_y: f64,
     pub show_grid: bool,
     pub white_background: bool,
+    pub target_monitor: Option<String>,
 }
 
 impl Default for Config {
@@ -36,6 +37,7 @@ impl Default for Config {
             grid_offset_y: 0.0,
             show_grid: false,
             white_background: false,
+            target_monitor: None,
         }
     }
 }
