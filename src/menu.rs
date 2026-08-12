@@ -88,6 +88,30 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     opacity_box.append(&opacity_label);
     opacity_box.append(&opacity_scale);
 
+    let pen_width_box = gtk::Box::new(Orientation::Horizontal, 8);
+    pen_width_box.set_margin_start(4);
+    pen_width_box.set_margin_end(4);
+    let pen_width_label = gtk::Label::new(Some("Pen Width:"));
+    let pen_width_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.1, 50.0, 0.1);
+    pen_width_scale.set_digits(1);
+    pen_width_scale.set_value(state.borrow().config.base_pen_width);
+    pen_width_scale.set_draw_value(true);
+    pen_width_scale.set_hexpand(true);
+    pen_width_box.append(&pen_width_label);
+    pen_width_box.append(&pen_width_scale);
+
+    let eraser_width_box = gtk::Box::new(Orientation::Horizontal, 8);
+    eraser_width_box.set_margin_start(4);
+    eraser_width_box.set_margin_end(4);
+    let eraser_width_label = gtk::Label::new(Some("Eraser Width:"));
+    let eraser_width_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.1, 100.0, 0.1);
+    eraser_width_scale.set_digits(1);
+    eraser_width_scale.set_value(state.borrow().config.base_eraser_width);
+    eraser_width_scale.set_draw_value(true);
+    eraser_width_scale.set_hexpand(true);
+    eraser_width_box.append(&eraser_width_label);
+    eraser_width_box.append(&eraser_width_scale);
+
     let btn_save = Button::with_label("Save Full Sketch (SVG)");
     let btn_save_png = Button::with_label("Save Full Sketch (PNG)");
     let btn_save_grid = Button::with_label("Save Grid Cells");
@@ -104,6 +128,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_grid);
     menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
+    menu_box.append(&pen_width_box);
+    menu_box.append(&eraser_width_box);
     menu_box.append(&btn_save);
     menu_box.append(&btn_save_png);
     menu_box.append(&btn_save_grid);
@@ -210,6 +236,26 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
                 window.set_opacity(scale.value() / 100.0);
             }
+        }
+    ));
+
+    pen_width_scale.connect_value_changed(glib::clone!(
+        #[strong]
+        state,
+        move |scale| {
+            let mut s = state.borrow_mut();
+            s.config.base_pen_width = scale.value();
+            s.config.save();
+        }
+    ));
+
+    eraser_width_scale.connect_value_changed(glib::clone!(
+        #[strong]
+        state,
+        move |scale| {
+            let mut s = state.borrow_mut();
+            s.config.base_eraser_width = scale.value();
+            s.config.save();
         }
     ));
 

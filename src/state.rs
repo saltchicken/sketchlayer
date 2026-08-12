@@ -231,7 +231,7 @@ impl AppState {
     }
 
     pub fn erase_at(&mut self, x: f64, y: f64) -> bool {
-        let erase_radius = 15.0; // In canvas coordinates now
+        let erase_radius = self.config.base_eraser_width;
         let mut erased_any = false;
         let test_point = Point {
             x,
