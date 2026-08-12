@@ -15,7 +15,8 @@ pub struct Config {
     pub grid_offset_x: f64,
     pub grid_offset_y: f64,
     pub show_grid: bool,
-    pub white_background: bool,
+    pub transparent_background: bool,
+    pub background_color: [f64; 4],
     pub target_monitor: Option<String>,
 }
 
@@ -36,7 +37,8 @@ impl Default for Config {
             grid_offset_x: 0.0,
             grid_offset_y: 0.0,
             show_grid: false,
-            white_background: false,
+            transparent_background: true,
+            background_color: [1.0, 1.0, 1.0, 1.0],
             target_monitor: None,
         }
     }

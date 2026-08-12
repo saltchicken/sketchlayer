@@ -36,18 +36,18 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
         }
     };
 
-    let is_white_bg = state.config.white_background;
+    let is_transparent = state.config.transparent_background;
 
     match gtk::cairo::SvgSurface::new(width, height, Some(path_str)) {
         Ok(surface) => {
             let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
 
             for stroke in &state.strokes {
-                render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+                render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
             }
 
             if let Some(current) = &state.current_stroke {
-                render_stroke(&cr, current, is_white_bg, &state.config);
+                render_stroke(&cr, current, is_transparent, &state.config);
             }
 
             surface.finish();
@@ -78,7 +78,8 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
     let filename = format!("sketchlayer_{}.png", timestamp);
     let full_path = save_dir.join(&filename);
 
-    let is_white_bg = state.config.white_background;
+    let is_transparent = state.config.transparent_background;
+    let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
     let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
         Ok(surf) => surf,
@@ -90,25 +91,24 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
 
     let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
 
-    if is_white_bg {
-        cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-        cr.set_operator(gtk::cairo::Operator::Source);
-        cr.paint().expect("Failed to paint background");
-    } else {
+    if is_transparent {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
         cr.set_operator(gtk::cairo::Operator::Clear);
-        cr.paint().expect("Failed to paint background");
+    } else {
+        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
+        cr.set_operator(gtk::cairo::Operator::Source);
     }
+    cr.paint().expect("Failed to paint background");
     cr.set_operator(gtk::cairo::Operator::Over);
 
     // Render all strokes
     for stroke in &state.strokes {
-        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+        render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
     }
 
     // Render active stroke if currently drawing
     if let Some(current) = &state.current_stroke {
-        render_stroke(&cr, current, is_white_bg, &state.config);
+        render_stroke(&cr, current, is_transparent, &state.config);
     }
 
     surface.flush();
@@ -199,7 +199,8 @@ pub fn save_grids(state: &AppState) {
         return;
     }
 
-    let is_white_bg = state.config.white_background;
+    let is_transparent = state.config.transparent_background;
+    let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
     for (c, r) in active_cells {
         let cell_x = start_x + c as f64 * cell_w;
@@ -221,8 +222,8 @@ pub fn save_grids(state: &AppState) {
                 // Shift view to center on this cell coordinate
                 cr.translate(-cell_x, -cell_y);
 
-                if is_white_bg {
-                    cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+                if !is_transparent {
+                    cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
                     cr.paint().expect("Failed to paint background");
                     cr.set_operator(gtk::cairo::Operator::Over);
                 }
@@ -231,14 +232,14 @@ pub fn save_grids(state: &AppState) {
                 for stroke in &state.strokes {
                     let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
                     if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
-                        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+                        render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
                     }
                 }
 
                 if let Some(current) = &state.current_stroke {
                     let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
                     if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
-                        render_stroke(&cr, current, is_white_bg, &state.config);
+                        render_stroke(&cr, current, is_transparent, &state.config);
                     }
                 }
 
@@ -258,15 +259,17 @@ pub fn save_grids(state: &AppState) {
 pub fn render_stroke(
     cr: &gtk::cairo::Context,
     stroke: &Stroke,
-    is_white_bg: bool,
+    is_transparent: bool,
     config: &Config,
 ) {
     if stroke.points.len() < 2 {
         return;
     }
 
+    let [bg_r, bg_g, bg_b, _] = config.background_color;
+
     if stroke.is_eraser {
-        if is_white_bg {
+        if !is_transparent {
             cr.set_operator(gtk::cairo::Operator::Over);
         } else {
             cr.set_operator(gtk::cairo::Operator::DestOut);
@@ -284,8 +287,8 @@ pub fn render_stroke(
         let alpha = pressure.clamp(0.1, 1.0);
         if stroke.is_eraser {
             cr.set_line_width(config.base_eraser_width + (pressure * config.eraser_pressure_mult));
-            if is_white_bg {
-                cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
+            if !is_transparent {
+                cr.set_source_rgba(bg_r, bg_g, bg_b, alpha);
             } else {
                 cr.set_source_rgba(0.0, 0.0, 0.0, alpha);
             }
@@ -342,7 +345,8 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
     let width = window.width();
     let height = window.height();
 
-    let is_white_bg = state.config.white_background;
+    let is_transparent = state.config.transparent_background;
+    let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
     let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height)
     {
@@ -355,23 +359,22 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
 
     let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
 
-    if is_white_bg {
-        cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-        cr.set_operator(gtk::cairo::Operator::Source);
-        cr.paint().expect("Failed to paint background");
-    } else {
+    if is_transparent {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
         cr.set_operator(gtk::cairo::Operator::Clear);
-        cr.paint().expect("Failed to paint background");
+    } else {
+        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
+        cr.set_operator(gtk::cairo::Operator::Source);
     }
+    cr.paint().expect("Failed to paint background");
     cr.set_operator(gtk::cairo::Operator::Over);
 
     for stroke in &state.strokes {
-        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+        render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
     }
 
     if let Some(current) = &state.current_stroke {
-        render_stroke(&cr, current, is_white_bg, &state.config);
+        render_stroke(&cr, current, is_transparent, &state.config);
     }
 
     surface.flush();
@@ -423,7 +426,8 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     let main_x = start_x + c as f64 * cell_w;
     let main_y = start_y + r as f64 * cell_h;
 
-    let is_white_bg = state.config.white_background;
+    let is_transparent = state.config.transparent_background;
+    let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
     // 5. Create a surface exactly the size of your grid cell
     let surface = match gtk::cairo::ImageSurface::create(
@@ -443,25 +447,25 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     // 6. Shift the canvas so the top-left of the main cell becomes (0,0)
     cr.translate(-main_x, -main_y);
 
-    if is_white_bg {
-        cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-        cr.set_operator(gtk::cairo::Operator::Source);
+    if is_transparent {
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+        cr.set_operator(gtk::cairo::Operator::Clear);
         cr.paint().expect("Failed to paint background");
         cr.set_operator(gtk::cairo::Operator::Over);
     } else {
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-        cr.set_operator(gtk::cairo::Operator::Clear);
+        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
+        cr.set_operator(gtk::cairo::Operator::Source);
         cr.paint().expect("Failed to paint background");
         cr.set_operator(gtk::cairo::Operator::Over);
     }
 
     // 7. Render strokes (Cairo automatically clips anything outside the bounds)
     for stroke in &state.strokes {
-        render_stroke(&cr, stroke.as_ref(), is_white_bg, &state.config);
+        render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
     }
 
     if let Some(current) = &state.current_stroke {
-        render_stroke(&cr, current, is_white_bg, &state.config);
+        render_stroke(&cr, current, is_transparent, &state.config);
     }
 
     surface.flush();

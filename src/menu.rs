@@ -188,7 +188,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |_| {
             {
                 let mut s = state.borrow_mut();
-                s.config.white_background = !s.config.white_background;
+                s.config.transparent_background = !s.config.transparent_background;
                 s.needs_full_redraw = true; // Invalidate the cached surface
                 s.config.save();
             }

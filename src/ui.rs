@@ -78,7 +78,8 @@ fn setup_css() {
 fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     drawing_area.set_draw_func(move |_area, cr, width, height| {
         let mut state = state.borrow_mut();
-        let is_white_bg = state.config.white_background;
+        let is_transparent = state.config.transparent_background;
+        let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
         let w = width as i32;
         let h = height as i32;
 
@@ -92,12 +93,12 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
                 .expect("Failed to create ImageSurface");
             let cache_cr = gtk::cairo::Context::new(&surf).expect("Failed to create cache context");
 
-            if is_white_bg {
-                cache_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-                cache_cr.set_operator(gtk::cairo::Operator::Source);
-            } else {
+            if is_transparent {
                 cache_cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
                 cache_cr.set_operator(gtk::cairo::Operator::Clear);
+            } else {
+                cache_cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
+                cache_cr.set_operator(gtk::cairo::Operator::Source);
             }
             cache_cr
                 .paint()
@@ -108,7 +109,7 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             cache_cr.scale(state.zoom, state.zoom);
 
             for stroke in &state.strokes {
-                render_stroke(&cache_cr, stroke.as_ref(), is_white_bg, &state.config);
+                render_stroke(&cache_cr, stroke.as_ref(), is_transparent, &state.config);
             }
 
             state.cached_surface = Some(surf);
@@ -126,7 +127,7 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
                     render_stroke(
                         &cache_cr,
                         state.strokes[i].as_ref(),
-                        is_white_bg,
+                        is_transparent,
                         &state.config,
                     );
                 }
@@ -147,7 +148,7 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
         cr.scale(state.zoom, state.zoom);
 
         if let Some(current) = &state.current_stroke {
-            render_stroke(cr, current, is_white_bg, &state.config);
+            render_stroke(cr, current, is_transparent, &state.config);
         }
 
         if state.config.show_grid {
@@ -159,10 +160,15 @@ fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) 
             if cell_w > 0.0 && cell_h > 0.0 {
                 cr.set_operator(gtk::cairo::Operator::Over);
 
-                if is_white_bg {
-                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.15);
-                } else {
+                if is_transparent {
                     cr.set_source_rgba(1.0, 1.0, 1.0, 0.15);
+                } else {
+                    let luminance = 0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b;
+                    if luminance > 0.5 {
+                        cr.set_source_rgba(0.0, 0.0, 0.0, 0.15);
+                    } else {
+                        cr.set_source_rgba(1.0, 1.0, 1.0, 0.15);
+                    }
                 }
 
                 cr.set_line_width(1.0 / state.zoom);
