@@ -17,8 +17,13 @@ fn create_color_button(
     let btn = Button::builder().tooltip_text(name).build();
     let (r, g, b) = color_val;
 
+    // Use a unique class name for this color
+    let class_name = format!("color-btn-{}", name.to_lowercase());
+    btn.add_css_class(&class_name);
+
     let css = format!(
-        "button {{ background: rgba({}, {}, {}, 1.0); min-width: 24px; min-height: 24px; border-radius: 12px; }}",
+        ".{} {{ background: rgba({}, {}, {}, 1.0); min-width: 24px; min-height: 24px; border-radius: 12px; }}",
+        class_name,
         (r * 255.0) as i32,
         (g * 255.0) as i32,
         (b * 255.0) as i32
@@ -26,8 +31,13 @@ fn create_color_button(
 
     let provider = CssProvider::new();
     provider.load_from_data(&css);
-    btn.style_context()
-        .add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    
+    // Attach the provider globally instead of to the deprecated widget style context
+    gtk::style_context_add_provider_for_display(
+        &gtk::gdk::Display::default().expect("Could not connect to a display."),
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 
     btn.connect_clicked(glib::clone!(
         #[strong]
@@ -233,7 +243,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[weak]
         drawing_area,
         move |scale| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
                 window.set_opacity(scale.value() / 100.0);
             }
         }
@@ -267,8 +277,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
-                save_sketch(&window, &state.borrow());
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
+                save_sketch(&window, &*state.borrow());
             }
             popover.popdown();
         }
@@ -282,8 +292,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
-                save_sketch_png(&window, &state.borrow());
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
+                save_sketch_png(&window, &*state.borrow());
             }
             popover.popdown();
         }
@@ -295,7 +305,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            save_grids(&state.borrow());
+            save_grids(&*state.borrow());
             popover.popdown();
         }
     ));
@@ -308,8 +318,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
-                copy_to_clipboard(&window, &state.borrow());
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
+                copy_to_clipboard(&window, &*state.borrow());
             }
             popover.popdown();
         }
@@ -323,8 +333,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
-                copy_main_grid_to_clipboard(&window, &state.borrow());
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
+                copy_main_grid_to_clipboard(&window, &*state.borrow());
             }
             popover.popdown();
         }
@@ -356,7 +366,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[weak]
         popover,
         move |_| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
                 window.set_visible(false);
             }
             popover.popdown();
@@ -367,7 +377,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[weak]
         drawing_area,
         move |_| {
-            if let Some(window) = drawing_area.root().and_downcast_ref::<ApplicationWindow>() {
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
                 window.close();
             }
         }

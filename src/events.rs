@@ -234,9 +234,9 @@ pub fn setup_keyboard_events(
                 && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
             {
                 if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                    save_grids(&state.borrow());
+                    save_grids(&*state.borrow());
                 } else {
-                    save_sketch(&window, &state.borrow());
+                    save_sketch(&window, &*state.borrow());
                 }
                 return glib::Propagation::Stop;
             }
@@ -245,9 +245,9 @@ pub fn setup_keyboard_events(
                 && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
             {
                 if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                    copy_main_grid_to_clipboard(&window, &state.borrow());
+                    copy_main_grid_to_clipboard(&window, &*state.borrow());
                 } else {
-                    copy_to_clipboard(&window, &state.borrow());
+                    copy_to_clipboard(&window, &*state.borrow());
                 }
                 return glib::Propagation::Stop;
             }
