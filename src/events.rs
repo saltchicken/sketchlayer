@@ -249,13 +249,14 @@ pub fn setup_keyboard_events(
             if (key == gdk::Key::c || key == gdk::Key::C)
                 && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
             {
+                // SWAPPED: Shift + Ctrl + C now copies the full sketch, while Ctrl + C copies the main grid
                 if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                    if let Err(e) = copy_main_grid_to_clipboard(&window, &*state.borrow()) {
-                        error!("Failed to copy main grid to clipboard: {:?}", e);
-                    }
-                } else {
                     if let Err(e) = copy_to_clipboard(&window, &*state.borrow()) {
                         error!("Failed to copy sketch to clipboard: {:?}", e);
+                    }
+                } else {
+                    if let Err(e) = copy_main_grid_to_clipboard(&window, &*state.borrow()) {
+                        error!("Failed to copy main grid to clipboard: {:?}", e);
                     }
                 }
                 return glib::Propagation::Stop;
