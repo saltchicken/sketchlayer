@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
+use anyhow::Result;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum EraseMode {
@@ -133,13 +134,13 @@ impl AppState {
         }))
     }
     
-    pub fn save_state(&self, path: &Path) -> std::io::Result<()> {
+    pub fn save_state(&self, path: &Path) -> Result<()> {
         let file = File::create(path)?;
         serde_json::to_writer(file, &self.strokes)?;
         Ok(())
     }
 
-    pub fn load_state(&mut self, path: &Path) -> std::io::Result<()> {
+    pub fn load_state(&mut self, path: &Path) -> Result<()> {
         let file = File::open(path)?;
         let strokes: Vec<Rc<Stroke>> = serde_json::from_reader(file)?;
         self.strokes = strokes;

@@ -1,13 +1,15 @@
+use anyhow::{anyhow, Context, Result};
 use gtk::ApplicationWindow;
 use gtk::prelude::*;
 use gtk4 as gtk;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::info;
 
 use crate::config::Config;
 use crate::state::{AppState, Stroke};
 
-pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
+pub fn save_sketch(window: &ApplicationWindow, state: &AppState) -> Result<()> {
     let width = window.width() as f64;
     let height = window.height() as f64;
 
@@ -19,45 +21,38 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) {
     let save_dir = state.config.get_resolved_save_dir();
 
     if !save_dir.exists() {
-        if let Err(e) = fs::create_dir_all(&save_dir) {
-            eprintln!("❌ Failed to create save directory: {:?}", e);
-            return;
-        }
+        fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
 
     let filename = format!("sketchlayer_{}.svg", timestamp);
     let full_path = save_dir.join(&filename);
 
-    let path_str = match full_path.to_str() {
-        Some(s) => s,
-        None => {
-            eprintln!("❌ Failed to save SVG: Path contains invalid UTF-8");
-            return;
-        }
-    };
+    let path_str = full_path
+        .to_str()
+        .context("Failed to save SVG: Path contains invalid UTF-8")?;
 
     let is_transparent = state.config.transparent_background;
 
-    match gtk::cairo::SvgSurface::new(width, height, Some(path_str)) {
-        Ok(surface) => {
-            let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+    let surface = gtk::cairo::SvgSurface::new(width, height, Some(path_str))
+        .map_err(|e| anyhow!("Failed to create SvgSurface: {:?}", e))?;
+        
+    let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
-            for stroke in &state.strokes {
-                render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
-            }
-
-            if let Some(current) = &state.current_stroke {
-                render_stroke(&cr, current, is_transparent, &state.config);
-            }
-
-            surface.finish();
-            println!("✅ Sketch saved to {}", full_path.display());
-        }
-        Err(e) => eprintln!("❌ Failed to save SVG: {:?}", e),
+    for stroke in &state.strokes {
+        render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
     }
+
+    if let Some(current) = &state.current_stroke {
+        render_stroke(&cr, current, is_transparent, &state.config);
+    }
+
+    surface.finish();
+    info!("Sketch saved to {}", full_path.display());
+    
+    Ok(())
 }
 
-pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
+pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) -> Result<()> {
     let width = window.width();
     let height = window.height();
 
@@ -69,10 +64,7 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
     let save_dir = state.config.get_resolved_save_dir();
 
     if !save_dir.exists() {
-        if let Err(e) = fs::create_dir_all(&save_dir) {
-            eprintln!("❌ Failed to create save directory: {:?}", e);
-            return;
-        }
+        fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
 
     let filename = format!("sketchlayer_{}.png", timestamp);
@@ -81,15 +73,10 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
     let is_transparent = state.config.transparent_background;
     let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
-    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height) {
-        Ok(surf) => surf,
-        Err(e) => {
-            eprintln!("❌ Failed to create surface for PNG: {:?}", e);
-            return;
-        }
-    };
+    let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height)
+        .map_err(|e| anyhow!("Failed to create surface for PNG: {:?}", e))?;
 
-    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+    let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
     if is_transparent {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -98,7 +85,7 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
         cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
         cr.set_operator(gtk::cairo::Operator::Source);
     }
-    cr.paint().expect("Failed to paint background");
+    cr.paint().context("Failed to paint background")?;
     cr.set_operator(gtk::cairo::Operator::Over);
 
     // Render all strokes
@@ -113,28 +100,23 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) {
 
     surface.flush();
 
-    let mut file = match fs::File::create(&full_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("❌ Failed to create PNG file: {:?}", e);
-            return;
-        }
-    };
+    let mut file = fs::File::create(&full_path).context("Failed to create PNG file")?;
 
-    if let Err(e) = surface.write_to_png(&mut file) {
-        eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
-    } else {
-        println!("✅ Sketch saved to {}", full_path.display());
-    }
+    surface
+        .write_to_png(&mut file)
+        .map_err(|e| anyhow!("Failed to encode surface to PNG: {:?}", e))?;
+        
+    info!("Sketch saved to {}", full_path.display());
+
+    Ok(())
 }
 
-pub fn save_grids(state: &AppState) {
+pub fn save_grids(state: &AppState) -> Result<()> {
     let cell_w = state.config.grid_cell_width;
     let cell_h = state.config.grid_cell_height;
 
     if cell_w <= 0.0 || cell_h <= 0.0 {
-        eprintln!("❌ Invalid grid dimensions");
-        return;
+        return Err(anyhow!("Invalid grid dimensions"));
     }
 
     // Determine grid layout start position, mirroring ui.rs logic
@@ -154,10 +136,7 @@ pub fn save_grids(state: &AppState) {
 
     let save_dir = state.config.get_resolved_save_dir();
     if !save_dir.exists() {
-        if let Err(e) = fs::create_dir_all(&save_dir) {
-            eprintln!("❌ Failed to create save directory: {:?}", e);
-            return;
-        }
+        fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
 
     // Calculate maximum stroke padding so lines on borders are appropriately exported in adjacent cells
@@ -195,8 +174,8 @@ pub fn save_grids(state: &AppState) {
     }
 
     if active_cells.is_empty() {
-        println!("ℹ️ No geometry to save in grids.");
-        return;
+        info!("No geometry to save in grids.");
+        return Ok(());
     }
 
     let is_transparent = state.config.transparent_background;
@@ -214,46 +193,40 @@ pub fn save_grids(state: &AppState) {
             None => continue,
         };
 
-        match gtk::cairo::SvgSurface::new(cell_w, cell_h, Some(path_str)) {
-            Ok(surface) => {
-                let cr =
-                    gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+        let surface = gtk::cairo::SvgSurface::new(cell_w, cell_h, Some(path_str))
+            .map_err(|e| anyhow!("Failed to create SvgSurface for grid cell: {:?}", e))?;
+            
+        let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
-                // Shift view to center on this cell coordinate
-                cr.translate(-cell_x, -cell_y);
+        // Shift view to center on this cell coordinate
+        cr.translate(-cell_x, -cell_y);
 
-                if !is_transparent {
-                    cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
-                    cr.paint().expect("Failed to paint background");
-                    cr.set_operator(gtk::cairo::Operator::Over);
-                }
-
-                // Render intersecting strokes
-                for stroke in &state.strokes {
-                    let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
-                    if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
-                        render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
-                    }
-                }
-
-                if let Some(current) = &state.current_stroke {
-                    let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
-                    if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
-                        render_stroke(&cr, current, is_transparent, &state.config);
-                    }
-                }
-
-                surface.finish();
-                println!(
-                    "✅ Grid cell ({}, {}) saved to {}",
-                    c,
-                    r,
-                    full_path.display()
-                );
-            }
-            Err(e) => eprintln!("❌ Failed to save grid cell SVG: {:?}", e),
+        if !is_transparent {
+            cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
+            cr.paint().context("Failed to paint background")?;
+            cr.set_operator(gtk::cairo::Operator::Over);
         }
+
+        // Render intersecting strokes
+        for stroke in &state.strokes {
+            let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
+            if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
+                render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
+            }
+        }
+
+        if let Some(current) = &state.current_stroke {
+            let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
+            if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
+                render_stroke(&cr, current, is_transparent, &state.config);
+            }
+        }
+
+        surface.finish();
+        info!("Grid cell ({}, {}) saved to {}", c, r, full_path.display());
     }
+    
+    Ok(())
 }
 
 pub fn render_stroke(
@@ -341,23 +314,17 @@ pub fn render_stroke(
     cr.stroke().expect("Failed to stroke path");
 }
 
-pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
+pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result<()> {
     let width = window.width();
     let height = window.height();
 
     let is_transparent = state.config.transparent_background;
     let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
-    let surface = match gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height)
-    {
-        Ok(surf) => surf,
-        Err(e) => {
-            eprintln!("❌ Failed to create surface for clipboard: {:?}", e);
-            return;
-        }
-    };
+    let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height)
+        .map_err(|e| anyhow!("Failed to create surface for clipboard: {:?}", e))?;
 
-    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+    let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
     if is_transparent {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -366,7 +333,7 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
         cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
         cr.set_operator(gtk::cairo::Operator::Source);
     }
-    cr.paint().expect("Failed to paint background");
+    cr.paint().context("Failed to paint background")?;
     cr.set_operator(gtk::cairo::Operator::Over);
 
     for stroke in &state.strokes {
@@ -380,28 +347,26 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) {
     surface.flush();
 
     let mut png_data = Vec::new();
-    if let Err(e) = surface.write_to_png(&mut png_data) {
-        eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
-        return;
-    }
+    surface.write_to_png(&mut png_data)
+        .map_err(|e| anyhow!("Failed to encode surface to PNG: {:?}", e))?;
 
     let bytes = gtk::glib::Bytes::from(&png_data);
     let provider = gtk::gdk::ContentProvider::for_bytes("image/png", &bytes);
 
-    if let Err(e) = window.clipboard().set_content(Some(&provider)) {
-        eprintln!("❌ Failed to set clipboard content: {:?}", e);
-    } else {
-        println!("✅ Sketch copied to clipboard as PNG");
-    }
+    window.clipboard().set_content(Some(&provider))
+        .map_err(|e| anyhow!("Failed to set clipboard content: {:?}", e))?;
+        
+    info!("Sketch copied to clipboard as PNG");
+    
+    Ok(())
 }
 
-pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState) {
+pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result<()> {
     let cell_w = state.config.grid_cell_width;
     let cell_h = state.config.grid_cell_height;
 
     if cell_w <= 0.0 || cell_h <= 0.0 {
-        eprintln!("❌ Invalid grid dimensions");
-        return;
+        return Err(anyhow!("Invalid grid dimensions"));
     }
 
     // 1. Calculate grid alignment (mirroring your save_grids logic)
@@ -430,19 +395,13 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
     // 5. Create a surface exactly the size of your grid cell
-    let surface = match gtk::cairo::ImageSurface::create(
+    let surface = gtk::cairo::ImageSurface::create(
         gtk::cairo::Format::ARgb32,
         cell_w as i32,
         cell_h as i32,
-    ) {
-        Ok(surf) => surf,
-        Err(e) => {
-            eprintln!("❌ Failed to create surface for clipboard: {:?}", e);
-            return;
-        }
-    };
+    ).map_err(|e| anyhow!("Failed to create surface for clipboard: {:?}", e))?;
 
-    let cr = gtk::cairo::Context::new(&surface).expect("Failed to create cairo context");
+    let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
     // 6. Shift the canvas so the top-left of the main cell becomes (0,0)
     cr.translate(-main_x, -main_y);
@@ -450,12 +409,12 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     if is_transparent {
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
         cr.set_operator(gtk::cairo::Operator::Clear);
-        cr.paint().expect("Failed to paint background");
+        cr.paint().context("Failed to paint background")?;
         cr.set_operator(gtk::cairo::Operator::Over);
     } else {
         cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
         cr.set_operator(gtk::cairo::Operator::Source);
-        cr.paint().expect("Failed to paint background");
+        cr.paint().context("Failed to paint background")?;
         cr.set_operator(gtk::cairo::Operator::Over);
     }
 
@@ -471,17 +430,15 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     surface.flush();
 
     let mut png_data = Vec::new();
-    if let Err(e) = surface.write_to_png(&mut png_data) {
-        eprintln!("❌ Failed to encode surface to PNG: {:?}", e);
-        return;
-    }
+    surface.write_to_png(&mut png_data)
+        .map_err(|e| anyhow!("Failed to encode surface to PNG: {:?}", e))?;
 
     let bytes = gtk::glib::Bytes::from(&png_data);
     let provider = gtk::gdk::ContentProvider::for_bytes("image/png", &bytes);
 
-    if let Err(e) = window.clipboard().set_content(Some(&provider)) {
-        eprintln!("❌ Failed to set clipboard content: {:?}", e);
-    } else {
-        println!("✅ Main Grid ({}, {}) copied to clipboard as PNG", c, r);
-    }
+    window.clipboard().set_content(Some(&provider))
+        .map_err(|e| anyhow!("Failed to set clipboard content: {:?}", e))?;
+        
+    info!("Main Grid ({}, {}) copied to clipboard as PNG", c, r);
+    Ok(())
 }

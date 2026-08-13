@@ -8,10 +8,14 @@ name = "sketchlayer"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1.0"
 cairo-rs = { version = "0.22.0", features = ["svg", "png"] }
+dirs = "5.0"
 gtk4 = "0.11.4"
 gtk4-layer-shell = "0.8.0"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 toml = "0.8"
-dirs = "5.0"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

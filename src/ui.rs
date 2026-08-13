@@ -5,6 +5,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::path::PathBuf;
+use tracing::{error, info};
 
 use crate::events::{setup_keyboard_events, setup_stylus_events, setup_view_events};
 use crate::menu::build_context_menu;
@@ -22,9 +23,9 @@ pub fn build_ui(app: &Application, load_path: Option<PathBuf>) {
 
     if let Some(path) = final_path {
         if let Err(e) = state.borrow_mut().load_state(&path) {
-            eprintln!("Failed to load state from {}: {:?}", path.display(), e);
+            error!("Failed to load state from {}: {:?}", path.display(), e);
         } else {
-            println!("Loaded state from {}", path.display());
+            info!("Loaded state from {}", path.display());
         }
     }
 

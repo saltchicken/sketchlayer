@@ -3,6 +3,7 @@ use gtk::{ApplicationWindow, Button, CssProvider, DrawingArea, Orientation, Popo
 use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
+use tracing::{error, info};
 
 use crate::render::{
     copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_sketch, save_sketch_png
@@ -284,7 +285,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                     
                     if !save_dir.exists() {
                         if let Err(e) = std::fs::create_dir_all(&save_dir) {
-                            eprintln!("Failed to create save directory: {:?}", e);
+                            error!("Failed to create save directory: {:?}", e);
                             popover.popdown();
                             return;
                         }
@@ -300,9 +301,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             };
 
             if let Err(e) = state.borrow().save_state(&full_path) {
-                eprintln!("Failed to save state: {:?}", e);
+                error!("Failed to save state: {:?}", e);
             } else {
-                println!("State saved to {}", full_path.display());
+                info!("State saved to {}", full_path.display());
                 // Ensure subsequent saves overwrite this newly created file
                 state.borrow_mut().current_file = Some(full_path);
             }
@@ -319,7 +320,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                save_sketch(&window, &*state.borrow());
+                if let Err(e) = save_sketch(&window, &*state.borrow()) {
+                    error!("Failed to save sketch: {:?}", e);
+                }
             }
             popover.popdown();
         }
@@ -334,7 +337,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                save_sketch_png(&window, &*state.borrow());
+                if let Err(e) = save_sketch_png(&window, &*state.borrow()) {
+                    error!("Failed to save sketch as PNG: {:?}", e);
+                }
             }
             popover.popdown();
         }
@@ -346,7 +351,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            save_grids(&*state.borrow());
+            if let Err(e) = save_grids(&*state.borrow()) {
+                error!("Failed to save grids: {:?}", e);
+            }
             popover.popdown();
         }
     ));
@@ -360,7 +367,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                copy_to_clipboard(&window, &*state.borrow());
+                if let Err(e) = copy_to_clipboard(&window, &*state.borrow()) {
+                    error!("Failed to copy sketch to clipboard: {:?}", e);
+                }
             }
             popover.popdown();
         }
@@ -375,7 +384,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                copy_main_grid_to_clipboard(&window, &*state.borrow());
+                if let Err(e) = copy_main_grid_to_clipboard(&window, &*state.borrow()) {
+                    error!("Failed to copy main grid to clipboard: {:?}", e);
+                }
             }
             popover.popdown();
         }

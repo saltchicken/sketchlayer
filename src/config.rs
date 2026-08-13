@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use tracing::{error, warn};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(default)]
@@ -58,13 +59,13 @@ impl Config {
             if let Ok(contents) = fs::read_to_string(&config_file) {
                 match toml::from_str(&contents) {
                     Ok(config) => return config,
-                    Err(e) => eprintln!(
-                        "Warning: Failed to parse config.toml ({:?}). Falling back to defaults.",
+                    Err(e) => warn!(
+                        "Failed to parse config.toml ({:?}). Falling back to defaults.",
                         e
                     ),
                 }
             } else {
-                eprintln!("Warning: Failed to read config.toml. Falling back to defaults.");
+                warn!("Failed to read config.toml. Falling back to defaults.");
             }
         } else {
             let default_config = Self::default();
@@ -84,7 +85,7 @@ impl Config {
         if let Ok(toml_string) = toml::to_string(self) {
             let _ = fs::create_dir_all(&config_dir);
             if let Err(e) = fs::write(&config_file, toml_string) {
-                eprintln!("Warning: Failed to save config.toml: {:?}", e);
+                error!("Failed to save config.toml: {:?}", e);
             }
         }
     }
