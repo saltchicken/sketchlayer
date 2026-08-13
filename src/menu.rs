@@ -389,14 +389,26 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            let mut s = state.borrow_mut();
-            if !s.strokes.is_empty() {
-                let strokes = std::mem::take(&mut s.strokes);
-                s.history.push(crate::state::Action::Clear(strokes));
-                s.redo_history.clear();
-                s.needs_full_redraw = true; // Invalidate cache
+            // Track if we actually need to ask GTK for a redraw
+            let mut should_redraw = false;
+
+            // 1. Strictly scope the state mutation
+            {
+                let mut s = state.borrow_mut();
+                if !s.strokes.is_empty() {
+                    let strokes = std::mem::take(&mut s.strokes);
+                    s.history.push(crate::state::Action::Clear(strokes));
+                    s.redo_history.clear();
+                    s.needs_full_redraw = true; // Invalidate cache
+                    should_redraw = true;
+                }
+            } // `s` (and the mutable borrow) is explicitly destroyed right here.
+
+            // 2. Perform GTK UI actions safely OUTSIDE the borrow
+            if should_redraw {
                 drawing_area.queue_draw();
             }
+            
             popover.popdown();
         }
     ));
