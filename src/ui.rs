@@ -4,16 +4,25 @@ use gtk4 as gtk;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::path::PathBuf;
 
 use crate::events::{setup_keyboard_events, setup_stylus_events, setup_view_events};
 use crate::menu::build_context_menu;
 use crate::render::render_stroke;
 use crate::state::AppState;
 
-pub fn build_ui(app: &Application) {
+pub fn build_ui(app: &Application, load_path: Option<PathBuf>) {
     setup_css();
 
     let state = AppState::new();
+
+    if let Some(path) = load_path {
+        if let Err(e) = state.borrow_mut().load_state(&path) {
+            eprintln!("Failed to load state from {}: {:?}", path.display(), e);
+        } else {
+            println!("Loaded state from {}", path.display());
+        }
+    }
 
     let drawing_area = DrawingArea::new();
     drawing_area.set_vexpand(true);

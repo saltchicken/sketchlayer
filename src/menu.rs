@@ -122,6 +122,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     eraser_width_box.append(&eraser_width_label);
     eraser_width_box.append(&eraser_width_scale);
 
+    let btn_save_state = Button::with_label("Save State (.sketchlayer)");
     let btn_save = Button::with_label("Save Full Sketch (SVG)");
     let btn_save_png = Button::with_label("Save Full Sketch (PNG)");
     let btn_save_grid = Button::with_label("Save Grid Cells");
@@ -140,6 +141,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&opacity_box);
     menu_box.append(&pen_width_box);
     menu_box.append(&eraser_width_box);
+    menu_box.append(&btn_save_state);
     menu_box.append(&btn_save);
     menu_box.append(&btn_save_png);
     menu_box.append(&btn_save_grid);
@@ -262,6 +264,39 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |scale| {
             let mut s = state.borrow_mut();
             s.config.base_eraser_width = scale.value();
+        }
+    ));
+
+    btn_save_state.connect_clicked(glib::clone!(
+        #[weak]
+        popover,
+        #[strong]
+        state,
+        move |_| {
+            let s = state.borrow();
+            let save_dir = s.config.get_resolved_save_dir();
+            
+            if !save_dir.exists() {
+                if let Err(e) = std::fs::create_dir_all(&save_dir) {
+                    eprintln!("Failed to create save directory: {:?}", e);
+                    popover.popdown();
+                    return;
+                }
+            }
+
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let filename = format!("sketchlayer_{}.sketchlayer", timestamp);
+            let full_path = save_dir.join(&filename);
+
+            if let Err(e) = s.save_state(&full_path) {
+                eprintln!("Failed to save state: {:?}", e);
+            } else {
+                println!("State saved to {}", full_path.display());
+            }
+            popover.popdown();
         }
     ));
 

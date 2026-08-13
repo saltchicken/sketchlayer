@@ -3,6 +3,9 @@ use gtk4 as gtk;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::fs::File;
+use std::path::Path;
+use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum EraseMode {
@@ -10,7 +13,7 @@ pub enum EraseMode {
     Pixel,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -33,7 +36,7 @@ impl Point {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
 pub struct BoundingBox {
     pub min_x: f64,
     pub min_y: f64,
@@ -59,7 +62,7 @@ impl BoundingBox {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Stroke {
     pub id: u64,
     pub points: Vec<Point>,
@@ -124,6 +127,23 @@ impl AppState {
             rendered_strokes_count: 0,
             needs_full_redraw: true,
         }))
+    }
+    
+    pub fn save_state(&self, path: &Path) -> std::io::Result<()> {
+        let file = File::create(path)?;
+        serde_json::to_writer(file, &self.strokes)?;
+        Ok(())
+    }
+
+    pub fn load_state(&mut self, path: &Path) -> std::io::Result<()> {
+        let file = File::open(path)?;
+        let strokes: Vec<Rc<Stroke>> = serde_json::from_reader(file)?;
+        self.strokes = strokes;
+        self.next_stroke_id = self.strokes.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+        self.history.clear();
+        self.redo_history.clear();
+        self.needs_full_redraw = true;
+        Ok(())
     }
 
     pub fn screen_to_canvas(&self, x: f64, y: f64) -> (f64, f64) {
