@@ -273,28 +273,38 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            let s = state.borrow();
-            let save_dir = s.config.get_resolved_save_dir();
-            
-            if !save_dir.exists() {
-                if let Err(e) = std::fs::create_dir_all(&save_dir) {
-                    eprintln!("Failed to create save directory: {:?}", e);
-                    popover.popdown();
-                    return;
+            let full_path = {
+                let s = state.borrow();
+                
+                // Use the tracked file if available, otherwise generate a new path
+                if let Some(ref path) = s.current_file {
+                    path.clone()
+                } else {
+                    let save_dir = s.config.get_resolved_save_dir();
+                    
+                    if !save_dir.exists() {
+                        if let Err(e) = std::fs::create_dir_all(&save_dir) {
+                            eprintln!("Failed to create save directory: {:?}", e);
+                            popover.popdown();
+                            return;
+                        }
+                    }
+
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    let filename = format!("sketchlayer_{}.sketchlayer", timestamp);
+                    save_dir.join(&filename)
                 }
-            }
+            };
 
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            let filename = format!("sketchlayer_{}.sketchlayer", timestamp);
-            let full_path = save_dir.join(&filename);
-
-            if let Err(e) = s.save_state(&full_path) {
+            if let Err(e) = state.borrow().save_state(&full_path) {
                 eprintln!("Failed to save state: {:?}", e);
             } else {
                 println!("State saved to {}", full_path.display());
+                // Ensure subsequent saves overwrite this newly created file
+                state.borrow_mut().current_file = Some(full_path);
             }
             popover.popdown();
         }

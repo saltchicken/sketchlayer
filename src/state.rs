@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -92,6 +92,8 @@ pub struct AppState {
     pub current_color: (f64, f64, f64),
     pub config: Config,
 
+    pub current_file: Option<PathBuf>,
+
     // View Transformation
     pub zoom: f64,
     pub offset_x: f64,
@@ -119,6 +121,8 @@ impl AppState {
             current_color: (0.0, 0.0, 0.0),
             config: Config::load(),
 
+            current_file: None,
+
             zoom: 1.0,
             offset_x: 0.0,
             offset_y: 0.0,
@@ -143,6 +147,9 @@ impl AppState {
         self.history.clear();
         self.redo_history.clear();
         self.needs_full_redraw = true;
+        
+        self.current_file = Some(path.to_path_buf());
+        
         Ok(())
     }
 
