@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[serde(default)]
 pub struct Config {
     pub save_dir: Option<String>,
+    pub load_file: Option<String>,
     pub base_pen_width: f64,
     pub pen_pressure_mult: f64,
     pub base_eraser_width: f64,
@@ -28,6 +29,7 @@ impl Default for Config {
 
         Self {
             save_dir: Some(default_save_path.to_string_lossy().into_owned()),
+            load_file: None,
             base_pen_width: 1.0,
             pen_pressure_mult: 3.0,
             base_eraser_width: 5.0,
@@ -105,5 +107,21 @@ impl Config {
         }
 
         PathBuf::from(dir_str)
+    }
+
+    pub fn get_resolved_load_file(&self) -> Option<PathBuf> {
+        let file_str = self.load_file.as_deref()?;
+
+        if file_str.is_empty() {
+            return None;
+        }
+
+        if file_str.starts_with("~/") {
+            if let Some(home) = dirs::home_dir() {
+                return Some(home.join(&file_str[2..]));
+            }
+        }
+
+        Some(PathBuf::from(file_str))
     }
 }

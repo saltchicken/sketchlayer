@@ -16,7 +16,11 @@ pub fn build_ui(app: &Application, load_path: Option<PathBuf>) {
 
     let state = AppState::new();
 
-    if let Some(path) = load_path {
+    // Prefer command line path, fallback to config path
+    let config_load_path = state.borrow().config.get_resolved_load_file();
+    let final_path = load_path.or(config_load_path);
+
+    if let Some(path) = final_path {
         if let Err(e) = state.borrow_mut().load_state(&path) {
             eprintln!("Failed to load state from {}: {:?}", path.display(), e);
         } else {
