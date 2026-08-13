@@ -200,7 +200,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 let mut s = state.borrow_mut();
                 s.config.transparent_background = !s.config.transparent_background;
                 s.needs_full_redraw = true; // Invalidate the cached surface
-                s.config.save();
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -218,7 +217,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             {
                 let mut s = state.borrow_mut();
                 s.config.show_grid = !s.config.show_grid;
-                s.config.save();
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -255,7 +253,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |scale| {
             let mut s = state.borrow_mut();
             s.config.base_pen_width = scale.value();
-            s.config.save();
         }
     ));
 
@@ -265,7 +262,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |scale| {
             let mut s = state.borrow_mut();
             s.config.base_eraser_width = scale.value();
-            s.config.save();
         }
     ));
 
@@ -380,6 +376,15 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
                 window.close();
             }
+        }
+    ));
+
+    // Consolidate config saving to a single event when the menu is closed
+    popover.connect_closed(glib::clone!(
+        #[strong]
+        state,
+        move |_| {
+            state.borrow().config.save();
         }
     ));
 
