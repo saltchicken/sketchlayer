@@ -283,7 +283,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 if let Some(ref path) = s.current_file {
                     path.clone()
                 } else {
-                    let save_dir = s.config.get_resolved_save_dir();
+                    let save_dir = s.config.get_resolved_save_dir().join("sketchlayers");
                     
                     if !save_dir.exists() {
                         if let Err(e) = std::fs::create_dir_all(&save_dir) {

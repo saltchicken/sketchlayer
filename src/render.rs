@@ -18,7 +18,7 @@ pub fn save_sketch(window: &ApplicationWindow, state: &AppState) -> Result<()> {
         .unwrap()
         .as_secs();
 
-    let save_dir = state.config.get_resolved_save_dir();
+    let save_dir = state.config.get_resolved_save_dir().join("svgs");
 
     if !save_dir.exists() {
         fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
@@ -61,7 +61,7 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) -> Result<(
         .unwrap()
         .as_secs();
 
-    let save_dir = state.config.get_resolved_save_dir();
+    let save_dir = state.config.get_resolved_save_dir().join("images");
 
     if !save_dir.exists() {
         fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
@@ -138,7 +138,7 @@ pub fn save_grids(state: &AppState) -> Result<()> {
         .unwrap()
         .as_secs();
 
-    let save_dir = state.config.get_resolved_save_dir();
+    let save_dir = state.config.get_resolved_save_dir().join("svgs");
     if !save_dir.exists() {
         fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
@@ -264,7 +264,7 @@ pub fn save_main_grid_png(window: &ApplicationWindow, state: &AppState) -> Resul
         .unwrap()
         .as_secs();
 
-    let save_dir = state.config.get_resolved_save_dir();
+    let save_dir = state.config.get_resolved_save_dir().join("images");
     if !save_dir.exists() {
         fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
