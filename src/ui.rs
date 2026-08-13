@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use gtk4::prelude::*;
 use gtk4::{DrawingArea, ApplicationWindow};
+use gtk4_layer_shell::{LayerShell, Edge, Layer, KeyboardMode};
 use cairo::{ImageSurface, Format, Operator, Context};
 use crate::state::AppState;
 use crate::render::render_stroke;
@@ -14,14 +15,14 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) {
         .decorated(false)
         .build();
 
-    gtk4_layer_shell::init_for_window(&window);
-    gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
-    gtk4_layer_shell::set_anchor(&window, gtk4_layer_shell::Edge::Top, true);
-    gtk4_layer_shell::set_anchor(&window, gtk4_layer_shell::Edge::Left, true);
-    gtk4_layer_shell::set_anchor(&window, gtk4_layer_shell::Edge::Right, true);
-    gtk4_layer_shell::set_anchor(&window, gtk4_layer_shell::Edge::Bottom, true);
-    gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
-    gtk4_layer_shell::set_namespace(&window, "sketchlayer");
+    window.init_layer_shell();
+    window.set_layer(Layer::Overlay);
+    window.set_anchor(Edge::Top, true);
+    window.set_anchor(Edge::Left, true);
+    window.set_anchor(Edge::Right, true);
+    window.set_anchor(Edge::Bottom, true);
+    window.set_keyboard_mode(KeyboardMode::OnDemand);
+    window.set_namespace("sketchlayer");
     
     let drawing_area = DrawingArea::new();
     let state_clone = state.clone();

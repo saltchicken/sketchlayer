@@ -1,4 +1,4 @@
-use cairo::{Context, ImageSurface, Format, Operator};
+use cairo::{Context, Operator};
 use crate::state::{Stroke, AppState};
 use crate::config::Config;
 

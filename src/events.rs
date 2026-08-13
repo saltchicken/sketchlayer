@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use gtk4::prelude::*;
-use gtk4::{DrawingArea, EventControllerMotion, GestureClick, EventControllerKey, GestureScroll};
+use gtk4::{DrawingArea, EventControllerMotion, GestureClick, EventControllerKey, EventControllerScroll, EventControllerScrollFlags};
 use gdk4::Key;
 use crate::state::{AppState, Stroke, Point, Action, EraseMode, BoundingBox};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,9 +16,14 @@ pub fn setup_events(area: &DrawingArea, state: Rc<RefCell<AppState>>, window: &g
         let pressure = 0.5; // Stub for extended GdkEvent pressure handling 
         let (cx, cy) = s.screen_to_canvas(x, y);
 
+        // Pre-fetch config values to avoid simultaneous borrow conflicts
+        let pen_width = s.config.base_pen_width;
+        let eraser_width = s.config.base_eraser_width;
+
         if let Some(active) = s.active_stroke.as_mut() {
             active.points.push(Point { x: cx, y: cy, pressure });
-            let padding = if active.is_eraser { s.config.base_eraser_width } else { s.config.base_pen_width };
+            let padding = if active.is_eraser { eraser_width } else { pen_width };
+            
             if let Some(bbox) = active.bbox.as_mut() {
                 bbox.expand(cx, cy, padding);
             } else {
@@ -34,7 +39,6 @@ pub fn setup_events(area: &DrawingArea, state: Rc<RefCell<AppState>>, window: &g
     click.set_button(0); 
     let state_clone = state.clone();
     let area_clone = area.clone();
-    let window_clone = window.clone();
     
     click.connect_pressed(move |gesture, _, x, y| {
         let btn = gesture.current_button();
@@ -114,7 +118,7 @@ pub fn setup_events(area: &DrawingArea, state: Rc<RefCell<AppState>>, window: &g
     area.add_controller(click);
 
     // Scroll / Pan
-    let scroll = GestureScroll::new();
+    let scroll = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL | EventControllerScrollFlags::HORIZONTAL);
     let state_clone = state.clone();
     let area_clone = area.clone();
     scroll.connect_scroll(move |_, _dx, dy| {
@@ -131,6 +135,7 @@ pub fn setup_events(area: &DrawingArea, state: Rc<RefCell<AppState>>, window: &g
     let key = EventControllerKey::new();
     let state_clone = state.clone();
     let area_clone = area.clone();
+    let window_clone = window.clone(); // Clone the GTK reference for the static closure
     
     key.connect_key_pressed(move |_, keyval, _, state_mask| {
         let mut s = state_clone.borrow_mut();
@@ -138,7 +143,7 @@ pub fn setup_events(area: &DrawingArea, state: Rc<RefCell<AppState>>, window: &g
         let shift = state_mask.contains(gdk4::ModifierType::SHIFT_MASK);
 
         match keyval {
-            Key::Escape => { window.hide(); }
+            Key::Escape => { window_clone.hide(); }
             Key::q | Key::Q if ctrl => { std::process::exit(0); }
             Key::s | Key::S if ctrl && shift => {
                 let p = crate::config::expand_tilde(&s.config.save_dir);
