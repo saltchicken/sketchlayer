@@ -1,285 +1,189 @@
-use gtk::prelude::*;
-use gtk::{ApplicationWindow, DrawingArea, EventControllerKey, GestureDrag, GestureStylus, Popover, gdk, glib};
-use gtk4 as gtk;
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::cell::RefCell;
+use gtk4::prelude::*;
+use gtk4::{DrawingArea, EventControllerMotion, GestureClick, EventControllerKey, GestureScroll};
+use gdk4::Key;
+use crate::state::{AppState, Stroke, Point, Action, EraseMode, BoundingBox};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::render::{copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_sketch};
-use crate::state::AppState;
+pub fn setup_events(area: &DrawingArea, state: Rc<RefCell<AppState>>, window: &gtk4::ApplicationWindow) {
+    // Pen Motion Handling
+    let motion = EventControllerMotion::new();
+    let state_clone = state.clone();
+    let area_clone = area.clone();
+    motion.connect_motion(move |_, x, y| {
+        let mut s = state_clone.borrow_mut();
+        let pressure = 0.5; // Stub for extended GdkEvent pressure handling 
+        let (cx, cy) = s.screen_to_canvas(x, y);
 
-pub fn setup_stylus_events(
-    drawing_area: &DrawingArea,
-    state: Rc<RefCell<AppState>>,
-    popover: Popover,
-) {
-    let stylus = GestureStylus::new();
-    stylus.set_button(0);
-
-    stylus.connect_down(glib::clone!(
-        #[strong]
-        state,
-        #[weak]
-        drawing_area,
-        #[weak]
-        popover,
-        move |gesture, x, y| {
-            let button = gesture.current_button();
-            let modifiers = gesture
-                .current_event()
-                .map(|e| e.modifier_state())
-                .unwrap_or(gtk::gdk::ModifierType::empty());
-
-            // Button 3 (Usually lower barrel / right-click) -> Context Menu
-            if button == 3 || modifiers.contains(gtk::gdk::ModifierType::BUTTON3_MASK) {
-                popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
-                popover.popup();
-
-                let mut state = state.borrow_mut();
-                state.is_erasing = false;
-                state.current_stroke = None;
-                return;
-            }
-
-            // Button 2 (Usually upper barrel / middle-click) -> Eraser
-            let is_eraser_tool = button == 2
-                || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK)
-                || modifiers.contains(gtk::gdk::ModifierType::BUTTON5_MASK)
-                || gesture
-                    .device_tool()
-                    .map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
-
-            let mut state = state.borrow_mut();
-            let erase_mode = state.erase_mode;
-            let (cx, cy) = state.screen_to_canvas(x, y);
-
-            if is_eraser_tool && erase_mode == crate::state::EraseMode::Vector {
-                state.is_erasing = true;
-                state.current_erased.clear();
-                if state.erase_at(cx, cy) {
-                    drawing_area.queue_draw();
-                }
+        if let Some(active) = s.active_stroke.as_mut() {
+            active.points.push(Point { x: cx, y: cy, pressure });
+            let padding = if active.is_eraser { s.config.base_eraser_width } else { s.config.base_pen_width };
+            if let Some(bbox) = active.bbox.as_mut() {
+                bbox.expand(cx, cy, padding);
             } else {
-                let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                state.start_stroke(cx, cy, pressure, is_eraser_tool);
+                active.bbox = Some(BoundingBox::new(cx, cy));
             }
+            area_clone.queue_draw();
         }
-    ));
+    });
+    area.add_controller(motion);
 
-    stylus.connect_motion(glib::clone!(
-        #[strong]
-        state,
-        #[weak]
-        drawing_area,
-        move |gesture, x, y| {
-            let mut s = state.borrow_mut();
-            let (cx, cy) = s.screen_to_canvas(x, y);
-
-            if s.is_erasing {
-                if s.erase_at(cx, cy) {
-                    drawing_area.queue_draw();
-                }
-            } else if s.current_stroke.is_some() {
-                let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
-                s.continue_stroke(cx, cy, pressure);
-                drawing_area.queue_draw();
-            }
+    // Click / Touch Start Handling
+    let click = GestureClick::new();
+    click.set_button(0); 
+    let state_clone = state.clone();
+    let area_clone = area.clone();
+    let window_clone = window.clone();
+    
+    click.connect_pressed(move |gesture, _, x, y| {
+        let btn = gesture.current_button();
+        let mut s = state_clone.borrow_mut();
+        
+        let is_eraser = s.is_erasing || btn == 2; 
+        
+        // Stylus Lower Barrel / Right Click Context Menu
+        if btn == 3 {
+            crate::menu::show_context_menu(&area_clone, x as i32, y as i32, state_clone.clone());
+            return;
         }
-    ));
 
-    stylus.connect_up(glib::clone!(
-        #[strong]
-        state,
-        #[weak]
-        drawing_area,
-        move |_gesture, _x, _y| {
-            let mut s = state.borrow_mut();
-
-            if s.is_erasing {
-                s.is_erasing = false;
-                if !s.current_erased.is_empty() {
-                    let erased = std::mem::take(&mut s.current_erased);
-                    s.history.push(crate::state::Action::Erase(erased));
-                    s.redo_history.clear();
-                }
-            } else if s.current_stroke.is_some() {
-                s.end_stroke();
-                drawing_area.queue_draw();
-            }
-        }
-    ));
-
-    drawing_area.add_controller(stylus);
-}
-
-pub fn setup_view_events(
-    drawing_area: &DrawingArea,
-    state: Rc<RefCell<AppState>>,
-) {
-    // --- SCROLL WHEEL = ZOOM ---
-    let scroll_controller = gtk::EventControllerScroll::new(
-        gtk::EventControllerScrollFlags::VERTICAL | gtk::EventControllerScrollFlags::HORIZONTAL,
-    );
-
-    let weak_da = drawing_area.downgrade();
-
-    scroll_controller.connect_scroll(glib::clone!(
-        #[strong] state,
-        move |controller, dx, dy| {
-            let Some(drawing_area) = weak_da.upgrade() else {
-                return glib::Propagation::Proceed;
-            };
-
-            let mut s = state.borrow_mut();
+        let (cx, cy) = s.screen_to_canvas(x, y);
+        let padding = if is_eraser { s.config.base_eraser_width } else { s.config.base_pen_width };
+        
+        if is_eraser && s.erase_mode == EraseMode::Vector {
+            let mut to_remove = Vec::new();
+            let mut new_strokes = Vec::new();
             
-            let (focal_x, focal_y) = if let Some(event) = controller.current_event() {
-                event.position().unwrap_or((drawing_area.width() as f64 / 2.0, drawing_area.height() as f64 / 2.0))
-            } else {
-                (drawing_area.width() as f64 / 2.0, drawing_area.height() as f64 / 2.0)
-            };
-
-            // Combine dx and dy so zoom works regardless of scroll wheel direction mapping
-            let amount = dx + dy; 
-            if amount != 0.0 {
-                let zoom_factor = if amount > 0.0 { 0.9 } else { 1.1 };
-                let new_zoom = s.zoom * zoom_factor;
-                s.set_zoom(new_zoom, focal_x, focal_y);
-            }
-
-            drawing_area.queue_draw();
-            glib::Propagation::Stop
-        }
-    ));
-
-    drawing_area.add_controller(scroll_controller);
-
-    // --- MIDDLE CLICK = PAN ---
-    let drag_controller = GestureDrag::new();
-    drag_controller.set_button(2); // Button 2 is the Middle Mouse Button
-
-    let pan_start = Rc::new(RefCell::new((0.0, 0.0)));
-
-    drag_controller.connect_drag_begin(glib::clone!(
-        #[strong] state,
-        #[strong] pan_start,
-        move |gesture, _start_x, _start_y| {
-            // Ignore panning requests if the device is a stylus (which frees button 2 for the eraser)
-            if gesture.current_event().and_then(|e| e.device_tool()).is_some() {
-                gesture.set_state(gtk::EventSequenceState::Denied);
-                return;
-            }
-
-            let s = state.borrow();
-            // Store the initial canvas offset when the drag starts
-            *pan_start.borrow_mut() = (s.offset_x, s.offset_y);
-        }
-    ));
-
-    let weak_da_drag = drawing_area.downgrade();
-    drag_controller.connect_drag_update(glib::clone!(
-        #[strong] state,
-        #[strong] pan_start,
-        move |gesture, offset_x, offset_y| {
-            // Ignore updates if a stylus is being used
-            if gesture.current_event().and_then(|e| e.device_tool()).is_some() {
-                return;
-            }
-
-            let Some(drawing_area) = weak_da_drag.upgrade() else {
-                return;
-            };
-            
-            let mut s = state.borrow_mut();
-            let start = *pan_start.borrow();
-            
-            // Add the drag offset to the original canvas offset
-            s.offset_x = start.0 + offset_x;
-            s.offset_y = start.1 + offset_y;
-            s.needs_full_redraw = true;
-            
-            drawing_area.queue_draw();
-        }
-    ));
-
-    drawing_area.add_controller(drag_controller);
-}
-
-pub fn setup_keyboard_events(
-    window: &ApplicationWindow,
-    drawing_area: &DrawingArea,
-    state: Rc<RefCell<AppState>>,
-) {
-    let key_controller = EventControllerKey::new();
-
-    key_controller.connect_key_pressed(glib::clone!(
-        #[strong]
-        window,
-        #[strong]
-        drawing_area,
-        #[strong]
-        state,
-        move |_ctrl, key, _keycode, modifier_state| {
-            if key == gdk::Key::Escape {
-                window.set_visible(false);
-                return glib::Propagation::Stop;
-            }
-
-            if (key == gdk::Key::q || key == gdk::Key::Q)
-                && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
-            {
-                window.close();
-                return glib::Propagation::Stop;
-            }
-
-            if (key == gdk::Key::s || key == gdk::Key::S)
-                && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
-            {
-                if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                    save_grids(&*state.borrow());
-                } else {
-                    save_sketch(&window, &*state.borrow());
-                }
-                return glib::Propagation::Stop;
-            }
-
-            if (key == gdk::Key::c || key == gdk::Key::C)
-                && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
-            {
-                if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                    copy_main_grid_to_clipboard(&window, &*state.borrow());
-                } else {
-                    copy_to_clipboard(&window, &*state.borrow());
-                }
-                return glib::Propagation::Stop;
-            }
-
-            if (key == gdk::Key::_0 || key == gdk::Key::KP_0)
-                && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
-            {
-                state.borrow_mut().reset_view();
-                drawing_area.queue_draw();
-                return glib::Propagation::Stop;
-            }
-
-            if key == gdk::Key::z || key == gdk::Key::Z {
-                if modifier_state.contains(gdk::ModifierType::CONTROL_MASK) {
-                    let mut state_mut = state.borrow_mut();
-
-                    if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                        if state_mut.redo() {
-                            drawing_area.queue_draw();
-                        }
-                    } else {
-                        if state_mut.undo() {
-                            drawing_area.queue_draw();
+            for stroke in &s.strokes {
+                let mut hit = false;
+                if let Some(bbox) = &stroke.bbox {
+                    let e_bbox = BoundingBox {
+                        min_x: cx - padding, max_x: cx + padding,
+                        min_y: cy - padding, max_y: cy + padding,
+                    };
+                    if bbox.intersects(&e_bbox) {
+                        for i in 0..stroke.points.len().saturating_sub(1) {
+                            let p = Point { x: cx, y: cy, pressure: 1.0 };
+                            let dist = p.distance_to_segment(&stroke.points[i], &stroke.points[i+1]);
+                            if dist < padding {
+                                hit = true;
+                                break;
+                            }
                         }
                     }
-                    return glib::Propagation::Stop;
+                }
+                if hit { to_remove.push(stroke.clone()); } 
+                else { new_strokes.push(stroke.clone()); }
+            }
+            
+            if !to_remove.is_empty() {
+                s.strokes = new_strokes;
+                s.undo_stack.push(Action::Erase(to_remove));
+                s.redo_stack.clear();
+                s.needs_full_redraw = true;
+                area_clone.queue_draw();
+            }
+        } else {
+            let mut bbox = BoundingBox::new(cx, cy);
+            bbox.expand(cx, cy, padding);
+            
+            s.active_stroke = Some(Stroke {
+                id: s.next_stroke_id,
+                points: vec![Point { x: cx, y: cy, pressure: 0.5 }],
+                color: s.current_color,
+                is_eraser,
+                bbox: Some(bbox),
+            });
+            s.next_stroke_id += 1;
+        }
+    });
+
+    let state_clone = state.clone();
+    let area_clone = area.clone();
+    click.connect_released(move |_, _, _, _| {
+        let mut s = state_clone.borrow_mut();
+        if let Some(stroke) = s.active_stroke.take() {
+            let rc_stroke = Rc::new(stroke);
+            s.strokes.push(rc_stroke.clone());
+            s.undo_stack.push(Action::Draw(rc_stroke));
+            s.redo_stack.clear();
+            area_clone.queue_draw();
+        }
+    });
+    area.add_controller(click);
+
+    // Scroll / Pan
+    let scroll = GestureScroll::new();
+    let state_clone = state.clone();
+    let area_clone = area.clone();
+    scroll.connect_scroll(move |_, _dx, dy| {
+        let mut s = state_clone.borrow_mut();
+        let zoom_factor = if dy > 0.0 { 0.9 } else { 1.1 };
+        s.zoom *= zoom_factor;
+        s.needs_full_redraw = true;
+        area_clone.queue_draw();
+        glib::Propagation::Proceed
+    });
+    area.add_controller(scroll);
+
+    // Keyboard Shortcuts
+    let key = EventControllerKey::new();
+    let state_clone = state.clone();
+    let area_clone = area.clone();
+    
+    key.connect_key_pressed(move |_, keyval, _, state_mask| {
+        let mut s = state_clone.borrow_mut();
+        let ctrl = state_mask.contains(gdk4::ModifierType::CONTROL_MASK);
+        let shift = state_mask.contains(gdk4::ModifierType::SHIFT_MASK);
+
+        match keyval {
+            Key::Escape => { window.hide(); }
+            Key::q | Key::Q if ctrl => { std::process::exit(0); }
+            Key::s | Key::S if ctrl && shift => {
+                let p = crate::config::expand_tilde(&s.config.save_dir);
+                crate::render::export_grids(&s, &p);
+            }
+            Key::s | Key::S if ctrl => {
+                let p = crate::config::expand_tilde(&s.config.save_dir);
+                std::fs::create_dir_all(&p).unwrap();
+                let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                let file = p.join(format!("sketch_{}.svg", time));
+                crate::render::export_svg(&s, &file, area_clone.width() as f64, area_clone.height() as f64);
+            }
+            Key::z | Key::Z if ctrl && shift => {
+                if let Some(action) = s.redo_stack.pop() {
+                    match &action {
+                        Action::Draw(stroke) => s.strokes.push(stroke.clone()),
+                        Action::Erase(strokes) => s.strokes.retain(|st| !strokes.iter().any(|r| r.id == st.id)),
+                        Action::Clear(_) => s.strokes.clear(),
+                    }
+                    s.undo_stack.push(action);
+                    s.needs_full_redraw = true;
+                    area_clone.queue_draw();
                 }
             }
-
-            glib::Propagation::Proceed
+            Key::z | Key::Z if ctrl => {
+                if let Some(action) = s.undo_stack.pop() {
+                    match &action {
+                        Action::Draw(stroke) => s.strokes.retain(|st| st.id != stroke.id),
+                        Action::Erase(strokes) | Action::Clear(strokes) => s.strokes.extend(strokes.clone()),
+                    }
+                    s.redo_stack.push(action);
+                    s.needs_full_redraw = true;
+                    area_clone.queue_draw();
+                }
+            }
+            Key::_0 if ctrl => {
+                s.zoom = 1.0;
+                s.offset_x = 0.0;
+                s.offset_y = 0.0;
+                s.needs_full_redraw = true;
+                area_clone.queue_draw();
+            }
+            _ => {}
         }
-    ));
-
-    window.add_controller(key_controller);
+        glib::Propagation::Proceed
+    });
+    window.add_controller(key);
 }

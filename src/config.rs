@@ -2,108 +2,74 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(default)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
-    pub save_dir: Option<String>,
+    pub save_dir: String,
+    pub load_file: Option<String>,
     pub base_pen_width: f64,
     pub pen_pressure_mult: f64,
     pub base_eraser_width: f64,
     pub eraser_pressure_mult: f64,
+    pub transparent_background: bool,
+    pub background_color: (f64, f64, f64, f64),
     pub grid_cell_width: f64,
     pub grid_cell_height: f64,
     pub grid_offset_x: f64,
     pub grid_offset_y: f64,
     pub show_grid: bool,
-    pub transparent_background: bool,
-    pub background_color: [f64; 4],
     pub target_monitor: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let default_save_path = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from(".local/share"))
-            .join("sketchlayer");
-
         Self {
-            save_dir: Some(default_save_path.to_string_lossy().into_owned()),
-            base_pen_width: 1.0,
-            pen_pressure_mult: 3.0,
-            base_eraser_width: 5.0,
-            eraser_pressure_mult: 15.0,
-            grid_cell_width: 50.0,
-            grid_cell_height: 50.0,
+            save_dir: "~/.local/share/sketchlayer".to_string(),
+            load_file: None,
+            base_pen_width: 2.0,
+            pen_pressure_mult: 4.0,
+            base_eraser_width: 20.0,
+            eraser_pressure_mult: 0.0,
+            transparent_background: true,
+            background_color: (0.0, 0.0, 0.0, 0.0),
+            grid_cell_width: 100.0,
+            grid_cell_height: 100.0,
             grid_offset_x: 0.0,
             grid_offset_y: 0.0,
             show_grid: false,
-            transparent_background: true,
-            background_color: [1.0, 1.0, 1.0, 1.0],
             target_monitor: None,
         }
     }
 }
 
+pub fn expand_tilde(path: &str) -> PathBuf {
+    if path.starts_with("~/") {
+        if let Some(user_dirs) = directories::UserDirs::new() {
+            let mut p = user_dirs.home_dir().to_path_buf();
+            p.push(&path[2..]);
+            return p;
+        }
+    }
+    PathBuf::from(path)
+}
+
 impl Config {
     pub fn load() -> Self {
-        let config_dir = dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(".config"))
-            .join("sketchlayer");
-
-        let config_file = config_dir.join("config.toml");
-
-        if config_file.exists() {
-            if let Ok(contents) = fs::read_to_string(&config_file) {
-                match toml::from_str(&contents) {
-                    Ok(config) => return config,
-                    Err(e) => eprintln!(
-                        "Warning: Failed to parse config.toml ({:?}). Falling back to defaults.",
-                        e
-                    ),
+        let config_path = expand_tilde("~/.config/sketchlayer/config.toml");
+        if config_path.exists() {
+            if let Ok(contents) = fs::read_to_string(&config_path) {
+                if let Ok(config) = toml::from_str(&contents) {
+                    return config;
                 }
-            } else {
-                eprintln!("Warning: Failed to read config.toml. Falling back to defaults.");
             }
         } else {
-            let default_config = Self::default();
-            default_config.save();
-        }
-
-        Self::default()
-    }
-
-    pub fn save(&self) {
-        let config_dir = dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(".config"))
-            .join("sketchlayer");
-
-        let config_file = config_dir.join("config.toml");
-
-        if let Ok(toml_string) = toml::to_string(self) {
-            let _ = fs::create_dir_all(&config_dir);
-            if let Err(e) = fs::write(&config_file, toml_string) {
-                eprintln!("Warning: Failed to save config.toml: {:?}", e);
+            let default_cfg = Config::default();
+            if let Some(parent) = config_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(toml_str) = toml::to_string_pretty(&default_cfg) {
+                let _ = fs::write(&config_path, toml_str);
             }
         }
-    }
-
-    pub fn get_resolved_save_dir(&self) -> PathBuf {
-        let fallback = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from(".local/share"))
-            .join("sketchlayer");
-
-        let dir_str = self.save_dir.as_deref().unwrap_or("");
-
-        if dir_str.is_empty() {
-            return fallback;
-        }
-
-        if dir_str.starts_with("~/") {
-            if let Some(home) = dirs::home_dir() {
-                return home.join(&dir_str[2..]);
-            }
-        }
-
-        PathBuf::from(dir_str)
+        Config::default()
     }
 }
