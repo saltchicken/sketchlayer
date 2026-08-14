@@ -5,10 +5,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tracing::{error, info};
 
-use crate::render::{
-    copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_main_grid_png, save_sketch, save_sketch_png
-};
-use crate::state::AppState;
+use crate::render::clipboard::{copy_main_grid_to_clipboard, copy_to_clipboard};
+use crate::render::export::{save_grids, save_main_grid_png, save_sketch, save_sketch_png};
+use crate::state::app_state::AppState;
+use crate::state::geometry::{Action, EraseMode};
 
 pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) -> Popover {
     let popover = Popover::new();
@@ -145,11 +145,11 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |btn| {
             let mut s = state.borrow_mut();
-            if s.erase_mode == crate::state::EraseMode::Vector {
-                s.erase_mode = crate::state::EraseMode::Pixel;
+            if s.erase_mode == EraseMode::Vector {
+                s.erase_mode = EraseMode::Pixel;
                 btn.set_label("Erase Mode: Pixel");
             } else {
-                s.erase_mode = crate::state::EraseMode::Vector;
+                s.erase_mode = EraseMode::Vector;
                 btn.set_label("Erase Mode: Vector");
             }
         }
@@ -409,7 +409,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 let mut s = state.borrow_mut();
                 if !s.strokes.is_empty() {
                     let strokes = std::mem::take(&mut s.strokes);
-                    s.history.push(crate::state::Action::Clear(strokes));
+                    s.history.push(Action::Clear(strokes));
                     s.redo_history.clear();
                     s.needs_full_redraw = true; 
                     should_redraw = true;
