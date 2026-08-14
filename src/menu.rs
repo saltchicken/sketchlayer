@@ -79,69 +79,51 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     }
     menu_box.append(&color_box);
 
-    // 2. Custom Color Picker (with Layer Shell logic)
-    let custom_color_box = gtk::Box::new(Orientation::Horizontal, 8);
-    custom_color_box.set_margin_start(4);
-    custom_color_box.set_margin_end(4);
-    custom_color_box.set_margin_bottom(8);
+    // 2. Custom Color Picker Widget via Nested Popover
+    #[allow(deprecated)]
+    {
+        let custom_color_box = gtk::Box::new(Orientation::Horizontal, 8);
+        custom_color_box.set_margin_start(4);
+        custom_color_box.set_margin_end(4);
+        custom_color_box.set_margin_bottom(8);
 
-    let custom_color_label = gtk::Label::new(Some("Custom Color:"));
-    custom_color_label.set_hexpand(true);
-    custom_color_label.set_halign(gtk::Align::Start);
+        let custom_color_label = gtk::Label::new(Some("Custom Color:"));
+        custom_color_label.set_hexpand(true);
+        custom_color_label.set_halign(gtk::Align::Start);
 
-    let color_dialog = gtk::ColorDialog::new();
-    let color_btn = Button::with_label("Open Picker...");
+        // A MenuButton naturally spawns a nested Popover attached to itself.
+        // This stops the main menu from resizing and jumping out from under your cursor.
+        let color_menu_btn = gtk::MenuButton::new();
+        color_menu_btn.set_label("Pick...");
+        color_menu_btn.set_always_show_arrow(true);
 
-    color_btn.connect_clicked(glib::clone!(
-        #[weak] drawing_area,
-        #[weak] popover,
-        #[strong] state,
-        #[strong] color_dialog,
-        move |_| {
-            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                use gtk4_layer_shell::{Layer, LayerShell};
-                
-                // Hide the popover menu before opening the dialog
-                popover.popdown();
+        let color_popover = gtk::Popover::new();
+        let color_chooser = gtk::ColorChooserWidget::new();
+        color_chooser.set_use_alpha(false);
 
-                // Temporarily drop the drawing overlay to the Bottom layer.
-                // Otherwise, Wayland will force the transparent canvas to render OVER the OS dialog, making it invisible.
-                window.set_layer(Layer::Bottom);
+        let current_color = state.borrow().current_color;
+        color_chooser.set_rgba(&gtk::gdk::RGBA::new(
+            current_color.0 as f32,
+            current_color.1 as f32,
+            current_color.2 as f32,
+            1.0,
+        ));
 
-                let current_color = state.borrow().current_color;
-                let initial_rgba = gtk::gdk::RGBA::new(
-                    current_color.0 as f32,
-                    current_color.1 as f32,
-                    current_color.2 as f32,
-                    1.0,
-                );
-
-                // Pass None as the parent so the portal daemon treats this as a new window.
-                // This allows Hyprland's placement rules to open it at the cursor on the correct monitor.
-                color_dialog.choose_rgba(
-                    None::<&ApplicationWindow>,
-                    Some(&initial_rgba),
-                    None::<&gtk::gio::Cancellable>,
-                    glib::clone!(#[weak] window, #[strong] state, move |result| {
-                        // Immediately restore the canvas to the Overlay layer when the dialog is dismissed or accepted
-                        window.set_layer(Layer::Overlay);
-
-                        if let Ok(rgba) = result {
-                            let r = rgba.red() as f64;
-                            let g = rgba.green() as f64;
-                            let b = rgba.blue() as f64;
-                            state.borrow_mut().current_color = (r, g, b);
-                        }
-                    })
-                );
+        color_chooser.connect_rgba_notify(glib::clone!(
+            #[strong] state,
+            move |chooser| {
+                let rgba = chooser.rgba();
+                state.borrow_mut().current_color = (rgba.red() as f64, rgba.green() as f64, rgba.blue() as f64);
             }
-        }
-    ));
+        ));
 
-    custom_color_box.append(&custom_color_label);
-    custom_color_box.append(&color_btn);
-    menu_box.append(&custom_color_box);
-
+        color_popover.set_child(Some(&color_chooser));
+        color_menu_btn.set_popover(Some(&color_popover));
+        
+        custom_color_box.append(&custom_color_label);
+        custom_color_box.append(&color_menu_btn);
+        menu_box.append(&custom_color_box);
+    }
 
     let btn_erase_mode = Button::with_label("Erase Mode: Vector");
     let btn_undo = Button::with_label("Undo");
@@ -533,7 +515,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
 
     let scrolled_window = gtk::ScrolledWindow::new();
     scrolled_window.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
-    scrolled_window.set_max_content_height(400);
+    
+    // We can safely increase max_height slightly to comfortably accommodate the native picker
+    scrolled_window.set_max_content_height(500);
     scrolled_window.set_propagate_natural_height(true);
     
     scrolled_window.set_child(Some(&menu_box));
