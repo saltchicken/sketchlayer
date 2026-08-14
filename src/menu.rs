@@ -61,7 +61,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.set_margin_bottom(4);
     menu_box.set_margin_start(4);
     menu_box.set_margin_end(4);
-    popover.set_child(Some(&menu_box));
 
     let color_box = gtk::Box::new(Orientation::Horizontal, 4);
     color_box.set_halign(gtk::Align::Center);
@@ -474,6 +473,17 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             state.borrow().config.save();
         }
     ));
+
+    // Wrap the tall menu box in a scrolling window so it never exceeds monitor bounds
+    let scrolled_window = gtk::ScrolledWindow::new();
+    scrolled_window.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
+    
+    // Set a safe maximum height (e.g., 400 pixels) so it fits anywhere on screen
+    scrolled_window.set_max_content_height(400);
+    scrolled_window.set_propagate_natural_height(true);
+    
+    scrolled_window.set_child(Some(&menu_box));
+    popover.set_child(Some(&scrolled_window));
 
     popover
 }
