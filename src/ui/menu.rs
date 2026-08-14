@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tracing::{error, info};
 
-use crate::render::clipboard::{copy_main_grid_to_clipboard, copy_to_clipboard};
-use crate::render::export::{save_grids, save_main_grid_png, save_sketch, save_sketch_png};
+use crate::render::clipboard::{copy_active_frame_to_clipboard, copy_to_clipboard};
+use crate::render::export::{save_frames, save_active_frame_png, save_sketch, save_sketch_png};
 use crate::state::app_state::AppState;
 use crate::state::geometry::{Action, EraseMode};
 
@@ -71,7 +71,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_undo = Button::with_label("Undo");
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
-    let btn_grid = Button::with_label("Toggle Grid");
+    let btn_frames = Button::with_label("Toggle Frame Guides");
     let btn_reset_view = Button::with_label("Reset View");
 
     let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
@@ -112,10 +112,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_save_state = Button::with_label("Save State (.sketchlayer)");
     let btn_save = Button::with_label("Save Full Sketch (SVG)");
     let btn_save_png = Button::with_label("Save Full Sketch (PNG)");
-    let btn_save_grid = Button::with_label("Save Grid Cells (SVG)");
-    let btn_save_main_png = Button::with_label("Save Main Grid (PNG)");
+    let btn_save_frames = Button::with_label("Save All Frames (SVG)");
+    let btn_save_active_frame_png = Button::with_label("Save Active Frame (PNG)");
     let btn_copy = Button::with_label("Copy Full Screen");
-    let btn_copy_main = Button::with_label("Copy Main Grid");
+    let btn_copy_active_frame = Button::with_label("Copy Active Frame");
     let btn_clear = Button::with_label("Clear Canvas");
     let btn_hide = Button::with_label("Hide Overlay");
     let btn_quit = Button::with_label("Quit");
@@ -124,7 +124,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_undo);
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
-    menu_box.append(&btn_grid);
+    menu_box.append(&btn_frames);
     menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
     menu_box.append(&pen_width_box);
@@ -132,10 +132,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_save_state);
     menu_box.append(&btn_save);
     menu_box.append(&btn_save_png);
-    menu_box.append(&btn_save_grid);
-    menu_box.append(&btn_save_main_png);
+    menu_box.append(&btn_save_frames);
+    menu_box.append(&btn_save_active_frame_png);
     menu_box.append(&btn_copy);
-    menu_box.append(&btn_copy_main);
+    menu_box.append(&btn_copy_active_frame);
     menu_box.append(&btn_clear);
     menu_box.append(&btn_hide);
     menu_box.append(&btn_quit);
@@ -197,7 +197,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
     ));
 
-    btn_grid.connect_clicked(glib::clone!(
+    btn_frames.connect_clicked(glib::clone!(
         #[weak]
         drawing_area,
         #[weak]
@@ -207,7 +207,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         move |_| {
             {
                 let mut s = state.borrow_mut();
-                s.config.show_grid = !s.config.show_grid;
+                s.config.show_frames = !s.config.show_frames;
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -331,20 +331,20 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
     ));
 
-    btn_save_grid.connect_clicked(glib::clone!(
+    btn_save_frames.connect_clicked(glib::clone!(
         #[weak]
         popover,
         #[strong]
         state,
         move |_| {
-            if let Err(e) = save_grids(&*state.borrow()) {
-                error!("Failed to save grids: {:?}", e);
+            if let Err(e) = save_frames(&*state.borrow()) {
+                error!("Failed to save frames: {:?}", e);
             }
             popover.popdown();
         }
     ));
 
-    btn_save_main_png.connect_clicked(glib::clone!(
+    btn_save_active_frame_png.connect_clicked(glib::clone!(
         #[weak]
         drawing_area,
         #[weak]
@@ -353,8 +353,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                if let Err(e) = save_main_grid_png(&window, &*state.borrow()) {
-                    error!("Failed to save main grid as PNG: {:?}", e);
+                if let Err(e) = save_active_frame_png(&window, &*state.borrow()) {
+                    error!("Failed to save active frame as PNG: {:?}", e);
                 }
             }
             popover.popdown();
@@ -378,7 +378,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
     ));
 
-    btn_copy_main.connect_clicked(glib::clone!(
+    btn_copy_active_frame.connect_clicked(glib::clone!(
         #[weak]
         drawing_area,
         #[weak]
@@ -387,8 +387,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |_| {
             if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
-                if let Err(e) = copy_main_grid_to_clipboard(&window, &*state.borrow()) {
-                    error!("Failed to copy main grid to clipboard: {:?}", e);
+                if let Err(e) = copy_active_frame_to_clipboard(&window, &*state.borrow()) {
+                    error!("Failed to copy active frame to clipboard: {:?}", e);
                 }
             }
             popover.popdown();

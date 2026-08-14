@@ -89,22 +89,22 @@ pub fn save_sketch_png(window: &ApplicationWindow, state: &AppState) -> Result<(
     Ok(())
 }
 
-pub fn save_grids(state: &AppState) -> Result<()> {
-    let cell_w = state.config.grid_cell_width;
-    let cell_h = state.config.grid_cell_height;
+pub fn save_frames(state: &AppState) -> Result<()> {
+    let frame_w = state.config.frame_width;
+    let frame_h = state.config.frame_height;
 
-    if cell_w <= 0.0 || cell_h <= 0.0 {
-        return Err(anyhow!("Invalid grid dimensions"));
+    if frame_w <= 0.0 || frame_h <= 0.0 {
+        return Err(anyhow!("Invalid frame dimensions"));
     }
 
-    // Determine grid layout start position
-    let mut start_x = state.config.grid_offset_x % cell_w;
+    // Determine frames layout start position
+    let mut start_x = state.config.frame_offset_x % frame_w;
     if start_x < 0.0 {
-        start_x += cell_w;
+        start_x += frame_w;
     }
-    let mut start_y = state.config.grid_offset_y % cell_h;
+    let mut start_y = state.config.frame_offset_y % frame_h;
     if start_y < 0.0 {
-        start_y += cell_h;
+        start_y += frame_h;
     }
 
     let timestamp = SystemTime::now()
@@ -117,53 +117,53 @@ pub fn save_grids(state: &AppState) -> Result<()> {
         fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
 
-    // Calculate maximum stroke padding so lines on borders are appropriately exported in adjacent cells
+    // Calculate maximum stroke padding so lines on borders are appropriately exported in adjacent frames
     let max_pen = state.config.base_pen_width + state.config.pen_pressure_mult;
     let max_eraser = state.config.base_eraser_width + state.config.eraser_pressure_mult;
     let padding = max_pen.max(max_eraser) / 2.0;
 
-    let mut active_cells = std::collections::HashSet::new();
+    let mut active_frames = std::collections::HashSet::new();
 
-    let get_cells_for_bbox = |bbox: &BoundingBox| {
-        let min_c = ((bbox.min_x - padding - start_x) / cell_w).floor() as i32;
-        let max_c = ((bbox.max_x + padding - start_x) / cell_w).floor() as i32;
-        let min_r = ((bbox.min_y - padding - start_y) / cell_h).floor() as i32;
-        let max_r = ((bbox.max_y + padding - start_y) / cell_h).floor() as i32;
+    let get_frames_for_bbox = |bbox: &BoundingBox| {
+        let min_c = ((bbox.min_x - padding - start_x) / frame_w).floor() as i32;
+        let max_c = ((bbox.max_x + padding - start_x) / frame_w).floor() as i32;
+        let min_r = ((bbox.min_y - padding - start_y) / frame_h).floor() as i32;
+        let max_r = ((bbox.max_y + padding - start_y) / frame_h).floor() as i32;
         (min_c, max_c, min_r, max_r)
     };
 
-    // Evaluate which cells have strokes
+    // Evaluate which frames have strokes
     for stroke in &state.strokes {
-        let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
+        let (min_c, max_c, min_r, max_r) = get_frames_for_bbox(&stroke.bbox);
         for c in min_c..=max_c {
             for r in min_r..=max_r {
-                active_cells.insert((c, r));
+                active_frames.insert((c, r));
             }
         }
     }
 
     if let Some(current) = &state.current_stroke {
-        let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
+        let (min_c, max_c, min_r, max_r) = get_frames_for_bbox(&current.bbox);
         for c in min_c..=max_c {
             for r in min_r..=max_r {
-                active_cells.insert((c, r));
+                active_frames.insert((c, r));
             }
         }
     }
 
-    if active_cells.is_empty() {
-        info!("No geometry to save in grids.");
+    if active_frames.is_empty() {
+        info!("No geometry to save in frames.");
         return Ok(());
     }
 
     let is_transparent = state.config.transparent_background;
     let [bg_r, bg_g, bg_b, bg_a] = state.config.background_color;
 
-    for (c, r) in active_cells {
-        let cell_x = start_x + c as f64 * cell_w;
-        let cell_y = start_y + r as f64 * cell_h;
+    for (c, r) in active_frames {
+        let frame_x = start_x + c as f64 * frame_w;
+        let frame_y = start_y + r as f64 * frame_h;
 
-        let filename = format!("sketchlayer_{}_cell_{}_{}.svg", timestamp, c, r);
+        let filename = format!("sketchlayer_{}_frame_{}_{}.svg", timestamp, c, r);
         let full_path = save_dir.join(&filename);
 
         let path_str = match full_path.to_str() {
@@ -171,13 +171,13 @@ pub fn save_grids(state: &AppState) -> Result<()> {
             None => continue,
         };
 
-        let surface = gtk::cairo::SvgSurface::new(cell_w, cell_h, Some(path_str))
-            .map_err(|e| anyhow!("Failed to create SvgSurface for grid cell: {:?}", e))?;
+        let surface = gtk::cairo::SvgSurface::new(frame_w, frame_h, Some(path_str))
+            .map_err(|e| anyhow!("Failed to create SvgSurface for frame: {:?}", e))?;
             
         let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
-        // Shift view to center on this cell coordinate
-        cr.translate(-cell_x, -cell_y);
+        // Shift view to center on this frame coordinate
+        cr.translate(-frame_x, -frame_y);
 
         if is_transparent {
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -193,51 +193,51 @@ pub fn save_grids(state: &AppState) -> Result<()> {
 
         // Render intersecting strokes
         for stroke in &state.strokes {
-            let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&stroke.bbox);
+            let (min_c, max_c, min_r, max_r) = get_frames_for_bbox(&stroke.bbox);
             if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
                 render_stroke(&cr, stroke.as_ref(), is_transparent, &state.config);
             }
         }
 
         if let Some(current) = &state.current_stroke {
-            let (min_c, max_c, min_r, max_r) = get_cells_for_bbox(&current.bbox);
+            let (min_c, max_c, min_r, max_r) = get_frames_for_bbox(&current.bbox);
             if c >= min_c && c <= max_c && r >= min_r && r <= max_r {
                 render_stroke(&cr, current, is_transparent, &state.config);
             }
         }
 
         surface.finish();
-        info!("Grid cell ({}, {}) saved to {}", c, r, full_path.display());
+        info!("Frame ({}, {}) saved to {}", c, r, full_path.display());
     }
     
     Ok(())
 }
 
-pub fn save_main_grid_png(window: &ApplicationWindow, state: &AppState) -> Result<()> {
-    let cell_w = state.config.grid_cell_width;
-    let cell_h = state.config.grid_cell_height;
+pub fn save_active_frame_png(window: &ApplicationWindow, state: &AppState) -> Result<()> {
+    let frame_w = state.config.frame_width;
+    let frame_h = state.config.frame_height;
 
-    if cell_w <= 0.0 || cell_h <= 0.0 {
-        return Err(anyhow!("Invalid grid dimensions"));
+    if frame_w <= 0.0 || frame_h <= 0.0 {
+        return Err(anyhow!("Invalid frame dimensions"));
     }
 
-    let mut start_x = state.config.grid_offset_x % cell_w;
+    let mut start_x = state.config.frame_offset_x % frame_w;
     if start_x < 0.0 {
-        start_x += cell_w;
+        start_x += frame_w;
     }
-    let mut start_y = state.config.grid_offset_y % cell_h;
+    let mut start_y = state.config.frame_offset_y % frame_h;
     if start_y < 0.0 {
-        start_y += cell_h;
+        start_y += frame_h;
     }
 
     let center_x = window.width() as f64 / 2.0;
     let center_y = window.height() as f64 / 2.0;
 
-    let c = ((center_x - start_x) / cell_w).floor() as i32;
-    let r = ((center_y - start_y) / cell_h).floor() as i32;
+    let c = ((center_x - start_x) / frame_w).floor() as i32;
+    let r = ((center_y - start_y) / frame_h).floor() as i32;
 
-    let main_x = start_x + c as f64 * cell_w;
-    let main_y = start_y + r as f64 * cell_h;
+    let main_x = start_x + c as f64 * frame_w;
+    let main_y = start_y + r as f64 * frame_h;
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -249,7 +249,7 @@ pub fn save_main_grid_png(window: &ApplicationWindow, state: &AppState) -> Resul
         fs::create_dir_all(&save_dir).context("Failed to create save directory")?;
     }
 
-    let filename = format!("sketchlayer_main_cell_{}_{}_{}.png", c, r, timestamp);
+    let filename = format!("sketchlayer_active_frame_{}_{}_{}.png", c, r, timestamp);
     let full_path = save_dir.join(&filename);
 
     let mut export_config = state.config.clone();
@@ -258,8 +258,8 @@ pub fn save_main_grid_png(window: &ApplicationWindow, state: &AppState) -> Resul
 
     let surface = gtk::cairo::ImageSurface::create(
         gtk::cairo::Format::ARgb32,
-        cell_w as i32,
-        cell_h as i32,
+        frame_w as i32,
+        frame_h as i32,
     ).map_err(|e| anyhow!("Failed to create surface for PNG: {:?}", e))?;
 
     let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
@@ -276,7 +276,7 @@ pub fn save_main_grid_png(window: &ApplicationWindow, state: &AppState) -> Resul
         .write_to_png(&mut file)
         .map_err(|e| anyhow!("Failed to encode surface to PNG: {:?}", e))?;
         
-    info!("Main Grid ({}, {}) saved to {}", c, r, full_path.display());
+    info!("Active Frame ({}, {}) saved to {}", c, r, full_path.display());
     
     Ok(())
 }

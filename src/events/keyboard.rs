@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tracing::error;
 
-use crate::render::clipboard::{copy_main_grid_to_clipboard, copy_to_clipboard};
-use crate::render::export::{save_grids, save_sketch};
+use crate::render::clipboard::{copy_active_frame_to_clipboard, copy_to_clipboard};
+use crate::render::export::{save_frames, save_sketch};
 use crate::state::app_state::AppState;
 
 pub fn setup_keyboard_events(
@@ -40,8 +40,8 @@ pub fn setup_keyboard_events(
                 && modifier_state.contains(gdk::ModifierType::CONTROL_MASK)
             {
                 if modifier_state.contains(gdk::ModifierType::SHIFT_MASK) {
-                    if let Err(e) = save_grids(&*state.borrow()) {
-                        error!("Failed to save grids from shortcut: {:?}", e);
+                    if let Err(e) = save_frames(&*state.borrow()) {
+                        error!("Failed to save frames from shortcut: {:?}", e);
                     }
                 } else {
                     if let Err(e) = save_sketch(&window, &*state.borrow()) {
@@ -59,8 +59,8 @@ pub fn setup_keyboard_events(
                         error!("Failed to copy sketch to clipboard: {:?}", e);
                     }
                 } else {
-                    if let Err(e) = copy_main_grid_to_clipboard(&window, &*state.borrow()) {
-                        error!("Failed to copy main grid to clipboard: {:?}", e);
+                    if let Err(e) = copy_active_frame_to_clipboard(&window, &*state.borrow()) {
+                        error!("Failed to copy active frame to clipboard: {:?}", e);
                     }
                 }
                 return glib::Propagation::Stop;

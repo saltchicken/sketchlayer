@@ -83,13 +83,13 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             render_stroke(cr, current, is_transparent, &state.config);
         }
 
-        if state.config.show_grid {
-            let cell_w = state.config.grid_cell_width;
-            let cell_h = state.config.grid_cell_height;
-            let off_x = state.config.grid_offset_x;
-            let off_y = state.config.grid_offset_y;
+        if state.config.show_frames {
+            let frame_w = state.config.frame_width;
+            let frame_h = state.config.frame_height;
+            let off_x = state.config.frame_offset_x;
+            let off_y = state.config.frame_offset_y;
 
-            if cell_w > 0.0 && cell_h > 0.0 {
+            if frame_w > 0.0 && frame_h > 0.0 {
                 cr.set_operator(gtk::cairo::Operator::Over);
 
                 if is_transparent {
@@ -108,24 +108,24 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 let (min_cx, min_cy) = state.screen_to_canvas(0.0, 0.0);
                 let (max_cx, max_cy) = state.screen_to_canvas(width as f64, height as f64);
 
-                let start_x = off_x + ((min_cx - off_x) / cell_w).floor() * cell_w;
-                let start_y = off_y + ((min_cy - off_y) / cell_h).floor() * cell_h;
+                let start_x = off_x + ((min_cx - off_x) / frame_w).floor() * frame_w;
+                let start_y = off_y + ((min_cy - off_y) / frame_h).floor() * frame_h;
 
                 let mut x = start_x;
                 while x <= max_cx {
                     cr.move_to(x, min_cy);
                     cr.line_to(x, max_cy);
-                    x += cell_w;
+                    x += frame_w;
                 }
 
                 let mut y = start_y;
                 while y <= max_cy {
                     cr.move_to(min_cx, y);
                     cr.line_to(max_cx, y);
-                    y += cell_h;
+                    y += frame_h;
                 }
 
-                cr.stroke().expect("Failed to draw grid");
+                cr.stroke().expect("Failed to draw frames");
             }
         }
 

@@ -39,31 +39,31 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result
     Ok(())
 }
 
-pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result<()> {
-    let cell_w = state.config.grid_cell_width;
-    let cell_h = state.config.grid_cell_height;
+pub fn copy_active_frame_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result<()> {
+    let frame_w = state.config.frame_width;
+    let frame_h = state.config.frame_height;
 
-    if cell_w <= 0.0 || cell_h <= 0.0 {
-        return Err(anyhow!("Invalid grid dimensions"));
+    if frame_w <= 0.0 || frame_h <= 0.0 {
+        return Err(anyhow!("Invalid frame dimensions"));
     }
 
-    let mut start_x = state.config.grid_offset_x % cell_w;
+    let mut start_x = state.config.frame_offset_x % frame_w;
     if start_x < 0.0 {
-        start_x += cell_w;
+        start_x += frame_w;
     }
-    let mut start_y = state.config.grid_offset_y % cell_h;
+    let mut start_y = state.config.frame_offset_y % frame_h;
     if start_y < 0.0 {
-        start_y += cell_h;
+        start_y += frame_h;
     }
 
     let center_x = window.width() as f64 / 2.0;
     let center_y = window.height() as f64 / 2.0;
 
-    let c = ((center_x - start_x) / cell_w).floor() as i32;
-    let r = ((center_y - start_y) / cell_h).floor() as i32;
+    let c = ((center_x - start_x) / frame_w).floor() as i32;
+    let r = ((center_y - start_y) / frame_h).floor() as i32;
 
-    let main_x = start_x + c as f64 * cell_w;
-    let main_y = start_y + r as f64 * cell_h;
+    let main_x = start_x + c as f64 * frame_w;
+    let main_y = start_y + r as f64 * frame_h;
 
     let mut export_config = state.config.clone();
     export_config.transparent_background = false;
@@ -71,8 +71,8 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
 
     let surface = gtk::cairo::ImageSurface::create(
         gtk::cairo::Format::ARgb32,
-        cell_w as i32,
-        cell_h as i32,
+        frame_w as i32,
+        frame_h as i32,
     ).map_err(|e| anyhow!("Failed to create surface for clipboard: {:?}", e))?;
 
     let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
@@ -93,6 +93,6 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     window.clipboard().set_content(Some(&provider))
         .map_err(|e| anyhow!("Failed to set clipboard content: {:?}", e))?;
         
-    info!("Main Grid ({}, {}) copied to clipboard as PNG", c, r);
+    info!("Active Frame ({}, {}) copied to clipboard as PNG", c, r);
     Ok(())
 }
