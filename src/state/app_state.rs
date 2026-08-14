@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::state::geometry::{Action, BoundingBox, EraseMode, Point, Stroke};
+use crate::state::geometry::{Action, BoundingBox, EraseMode, Point, Stroke, SpatialIndex};
 
 pub struct AppState {
     pub next_stroke_id: u64,
@@ -24,6 +24,8 @@ pub struct AppState {
     pub config: Config,
 
     pub current_file: Option<PathBuf>,
+
+    pub spatial_index: SpatialIndex, // <-- NEW
 
     // View Transformation
     pub zoom: f64,
@@ -53,6 +55,9 @@ impl AppState {
             config: Config::load(),
 
             current_file: None,
+            
+            // 256.0 is a good grid cell size balance between memory and query speed
+            spatial_index: SpatialIndex::new(256.0),
 
             zoom: 1.0,
             offset_x: 0.0,
@@ -78,6 +83,11 @@ impl AppState {
         self.history.clear();
         self.redo_history.clear();
         self.needs_full_redraw = true;
+        
+        self.spatial_index.clear();
+        for stroke in &self.strokes {
+            self.spatial_index.insert(stroke.id, &stroke.bbox);
+        }
         
         self.current_file = Some(path.to_path_buf());
         
@@ -146,6 +156,7 @@ impl AppState {
     pub fn end_stroke(&mut self) {
         if let Some(stroke) = self.current_stroke.take() {
             let rc_stroke = Rc::new(stroke);
+            self.spatial_index.insert(rc_stroke.id, &rc_stroke.bbox);
             self.history.push(Action::Draw(Rc::clone(&rc_stroke)));
             self.strokes.push(rc_stroke);
             self.redo_history.clear();
@@ -157,15 +168,22 @@ impl AppState {
         if let Some(action) = self.history.pop() {
             match action {
                 Action::Draw(stroke) => {
+                    self.spatial_index.remove(stroke.id, &stroke.bbox);
                     self.strokes.pop();
                     self.redo_history.push(Action::Draw(stroke));
                 }
                 Action::Erase(erased_strokes) => {
+                    for stroke in &erased_strokes {
+                        self.spatial_index.insert(stroke.id, &stroke.bbox);
+                    }
                     self.strokes.extend(erased_strokes.clone());
                     self.strokes.sort_by_key(|s| s.id);
                     self.redo_history.push(Action::Erase(erased_strokes));
                 }
                 Action::Clear(strokes) => {
+                    for stroke in &strokes {
+                        self.spatial_index.insert(stroke.id, &stroke.bbox);
+                    }
                     self.strokes = strokes.clone();
                     self.redo_history.push(Action::Clear(strokes));
                 }
@@ -182,15 +200,20 @@ impl AppState {
         if let Some(action) = self.redo_history.pop() {
             match action {
                 Action::Draw(stroke) => {
+                    self.spatial_index.insert(stroke.id, &stroke.bbox);
                     self.strokes.push(stroke.clone());
                     self.history.push(Action::Draw(stroke));
                 }
                 Action::Erase(erased_strokes) => {
                     let erased_ids: HashSet<u64> = erased_strokes.iter().map(|s| s.id).collect();
+                    for stroke in &erased_strokes {
+                        self.spatial_index.remove(stroke.id, &stroke.bbox);
+                    }
                     self.strokes.retain(|s| !erased_ids.contains(&s.id));
                     self.history.push(Action::Erase(erased_strokes));
                 }
                 Action::Clear(strokes) => {
+                    self.spatial_index.clear();
                     self.strokes.clear();
                     self.history.push(Action::Clear(strokes));
                 }
@@ -212,9 +235,30 @@ impl AppState {
             pressure: 1.0,
         };
 
+        // Create a query bounding box representing the eraser's area
+        let query_bbox = BoundingBox {
+            min_x: x - erase_radius,
+            min_y: y - erase_radius,
+            max_x: x + erase_radius,
+            max_y: y + erase_radius,
+        };
+
+        // Retrieve only the stroke IDs mapped to the overlapping cells
+        let candidates = self.spatial_index.query(&query_bbox);
+
+        if candidates.is_empty() {
+            return false;
+        }
+
+        // Iterate backward to erase top-level strokes first
         for i in (0..self.strokes.len()).rev() {
             let stroke = &self.strokes[i];
 
+            if !candidates.contains(&stroke.id) {
+                continue;
+            }
+
+            // Quick AABB test for early rejection on bounding limits
             if x < stroke.bbox.min_x - erase_radius
                 || x > stroke.bbox.max_x + erase_radius
                 || y < stroke.bbox.min_y - erase_radius
@@ -243,6 +287,7 @@ impl AppState {
 
             if hit {
                 let removed_stroke = self.strokes.remove(i);
+                self.spatial_index.remove(removed_stroke.id, &removed_stroke.bbox);
                 self.current_erased.push(removed_stroke);
                 erased_any = true;
                 self.needs_full_redraw = true;

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -70,4 +71,66 @@ pub enum Action {
     Draw(Rc<Stroke>),
     Erase(Vec<Rc<Stroke>>),
     Clear(Vec<Rc<Stroke>>),
+}
+
+// --- NEW: Spatial Index implementation ---
+#[derive(Clone, Default)]
+pub struct SpatialIndex {
+    pub cell_size: f64,
+    pub cells: HashMap<(i32, i32), HashSet<u64>>,
+}
+
+impl SpatialIndex {
+    pub fn new(cell_size: f64) -> Self {
+        Self {
+            cell_size,
+            cells: HashMap::new(),
+        }
+    }
+
+    fn get_cells(&self, bbox: &BoundingBox) -> Vec<(i32, i32)> {
+        let min_x = (bbox.min_x / self.cell_size).floor() as i32;
+        let max_x = (bbox.max_x / self.cell_size).floor() as i32;
+        let min_y = (bbox.min_y / self.cell_size).floor() as i32;
+        let max_y = (bbox.max_y / self.cell_size).floor() as i32;
+
+        let mut cells = Vec::new();
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                cells.push((x, y));
+            }
+        }
+        cells
+    }
+
+    pub fn insert(&mut self, id: u64, bbox: &BoundingBox) {
+        for cell in self.get_cells(bbox) {
+            self.cells.entry(cell).or_default().insert(id);
+        }
+    }
+
+    pub fn remove(&mut self, id: u64, bbox: &BoundingBox) {
+        for cell in self.get_cells(bbox) {
+            if let Some(set) = self.cells.get_mut(&cell) {
+                set.remove(&id);
+                if set.is_empty() {
+                    self.cells.remove(&cell);
+                }
+            }
+        }
+    }
+
+    pub fn query(&self, bbox: &BoundingBox) -> HashSet<u64> {
+        let mut result = HashSet::new();
+        for cell in self.get_cells(bbox) {
+            if let Some(set) = self.cells.get(&cell) {
+                result.extend(set);
+            }
+        }
+        result
+    }
+
+    pub fn clear(&mut self) {
+        self.cells.clear();
+    }
 }
