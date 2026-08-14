@@ -100,6 +100,7 @@ pub fn setup_stylus_events(
                     let erased = std::mem::take(&mut s.current_erased);
                     s.history.push(Action::Erase(erased));
                     s.redo_history.clear();
+                    s.cap_history();
                 }
             } else if s.current_stroke.is_some() {
                 s.end_stroke();

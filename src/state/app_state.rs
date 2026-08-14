@@ -106,6 +106,18 @@ impl AppState {
         self.needs_full_redraw = true;
     }
 
+    pub fn cap_history(&mut self) {
+        let limit = self.config.max_undo_steps;
+        if self.history.len() > limit {
+            let overflow = self.history.len() - limit;
+            self.history.drain(0..overflow);
+        }
+        if self.redo_history.len() > limit {
+            let overflow = self.redo_history.len() - limit;
+            self.redo_history.drain(0..overflow);
+        }
+    }
+
     pub fn start_stroke(&mut self, x: f64, y: f64, pressure: f64, is_eraser: bool) {
         self.is_erasing = false;
         let id = self.next_stroke_id;
@@ -137,6 +149,7 @@ impl AppState {
             self.history.push(Action::Draw(Rc::clone(&rc_stroke)));
             self.strokes.push(rc_stroke);
             self.redo_history.clear();
+            self.cap_history();
         }
     }
 
@@ -157,6 +170,7 @@ impl AppState {
                     self.redo_history.push(Action::Clear(strokes));
                 }
             }
+            self.cap_history();
             self.needs_full_redraw = true;
             true
         } else {
@@ -181,6 +195,7 @@ impl AppState {
                     self.history.push(Action::Clear(strokes));
                 }
             }
+            self.cap_history();
             self.needs_full_redraw = true;
             true
         } else {

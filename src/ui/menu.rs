@@ -411,6 +411,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                     let strokes = std::mem::take(&mut s.strokes);
                     s.history.push(Action::Clear(strokes));
                     s.redo_history.clear();
+                    s.cap_history();
                     s.needs_full_redraw = true; 
                     should_redraw = true;
                 }

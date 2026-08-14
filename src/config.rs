@@ -20,6 +20,7 @@ pub struct Config {
     pub transparent_background: bool,
     pub background_color: [f64; 4],
     pub target_monitor: Option<String>,
+    pub max_undo_steps: usize,
 }
 
 impl Default for Config {
@@ -43,6 +44,7 @@ impl Default for Config {
             transparent_background: true,
             background_color: [1.0, 1.0, 1.0, 1.0],
             target_monitor: None,
+            max_undo_steps: 50,
         }
     }
 }
