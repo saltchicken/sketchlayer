@@ -18,7 +18,6 @@ fn create_color_button(
     let btn = Button::builder().tooltip_text(name).build();
     let (r, g, b) = color_val;
 
-    // Use a unique class name for this color
     let class_name = format!("color-btn-{}", name.to_lowercase());
     btn.add_css_class(&class_name);
 
@@ -33,7 +32,6 @@ fn create_color_button(
     let provider = CssProvider::new();
     provider.load_from_data(&css);
     
-    // Attach the provider globally instead of to the deprecated widget style context
     gtk::style_context_add_provider_for_display(
         &gtk::gdk::Display::default().expect("Could not connect to a display."),
         &provider,
@@ -62,9 +60,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.set_margin_start(4);
     menu_box.set_margin_end(4);
 
+    // 1. Preset colors
     let color_box = gtk::Box::new(Orientation::Horizontal, 4);
     color_box.set_halign(gtk::Align::Center);
-    color_box.set_margin_bottom(8);
+    color_box.set_margin_bottom(4);
 
     let colors = [
         ("White", (1.0, 1.0, 1.0)),
@@ -79,6 +78,70 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         color_box.append(&create_color_button(name, color_val, state.clone()));
     }
     menu_box.append(&color_box);
+
+    // 2. Custom Color Picker (with Layer Shell logic)
+    let custom_color_box = gtk::Box::new(Orientation::Horizontal, 8);
+    custom_color_box.set_margin_start(4);
+    custom_color_box.set_margin_end(4);
+    custom_color_box.set_margin_bottom(8);
+
+    let custom_color_label = gtk::Label::new(Some("Custom Color:"));
+    custom_color_label.set_hexpand(true);
+    custom_color_label.set_halign(gtk::Align::Start);
+
+    let color_dialog = gtk::ColorDialog::new();
+    let color_btn = Button::with_label("Open Picker...");
+
+    color_btn.connect_clicked(glib::clone!(
+        #[weak] drawing_area,
+        #[weak] popover,
+        #[strong] state,
+        #[strong] color_dialog,
+        move |_| {
+            if let Some(window) = drawing_area.root().and_downcast::<ApplicationWindow>() {
+                use gtk4_layer_shell::{Layer, LayerShell};
+                
+                // Hide the popover menu before opening the dialog
+                popover.popdown();
+
+                // Temporarily drop the drawing overlay to the Bottom layer.
+                // Otherwise, Wayland will force the transparent canvas to render OVER the OS dialog, making it invisible.
+                window.set_layer(Layer::Bottom);
+
+                let current_color = state.borrow().current_color;
+                let initial_rgba = gtk::gdk::RGBA::new(
+                    current_color.0 as f32,
+                    current_color.1 as f32,
+                    current_color.2 as f32,
+                    1.0,
+                );
+
+                // Pass None as the parent so the portal daemon treats this as a new window.
+                // This allows Hyprland's placement rules to open it at the cursor on the correct monitor.
+                color_dialog.choose_rgba(
+                    None::<&ApplicationWindow>,
+                    Some(&initial_rgba),
+                    None::<&gtk::gio::Cancellable>,
+                    glib::clone!(#[weak] window, #[strong] state, move |result| {
+                        // Immediately restore the canvas to the Overlay layer when the dialog is dismissed or accepted
+                        window.set_layer(Layer::Overlay);
+
+                        if let Ok(rgba) = result {
+                            let r = rgba.red() as f64;
+                            let g = rgba.green() as f64;
+                            let b = rgba.blue() as f64;
+                            state.borrow_mut().current_color = (r, g, b);
+                        }
+                    })
+                );
+            }
+        }
+    ));
+
+    custom_color_box.append(&custom_color_label);
+    custom_color_box.append(&color_btn);
+    menu_box.append(&custom_color_box);
+
 
     let btn_erase_mode = Button::with_label("Erase Mode: Vector");
     let btn_undo = Button::with_label("Undo");
@@ -203,7 +266,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             {
                 let mut s = state.borrow_mut();
                 s.config.transparent_background = !s.config.transparent_background;
-                s.needs_full_redraw = true; // Invalidate the cached surface
+                s.needs_full_redraw = true;
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -278,7 +341,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             let full_path = {
                 let s = state.borrow();
                 
-                // Use the tracked file if available, otherwise generate a new path
                 if let Some(ref path) = s.current_file {
                     path.clone()
                 } else {
@@ -305,7 +367,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 error!("Failed to save state: {:?}", e);
             } else {
                 info!("State saved to {}", full_path.display());
-                // Ensure subsequent saves overwrite this newly created file
                 state.borrow_mut().current_file = Some(full_path);
             }
             popover.popdown();
@@ -418,22 +479,19 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         #[strong]
         state,
         move |_| {
-            // Track if we actually need to ask GTK for a redraw
             let mut should_redraw = false;
 
-            // 1. Strictly scope the state mutation
             {
                 let mut s = state.borrow_mut();
                 if !s.strokes.is_empty() {
                     let strokes = std::mem::take(&mut s.strokes);
                     s.history.push(crate::state::Action::Clear(strokes));
                     s.redo_history.clear();
-                    s.needs_full_redraw = true; // Invalidate cache
+                    s.needs_full_redraw = true; 
                     should_redraw = true;
                 }
-            } // `s` (and the mutable borrow) is explicitly destroyed right here.
+            } 
 
-            // 2. Perform GTK UI actions safely OUTSIDE the borrow
             if should_redraw {
                 drawing_area.queue_draw();
             }
@@ -465,7 +523,6 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
     ));
 
-    // Consolidate config saving to a single event when the menu is closed
     popover.connect_closed(glib::clone!(
         #[strong]
         state,
@@ -474,11 +531,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
     ));
 
-    // Wrap the tall menu box in a scrolling window so it never exceeds monitor bounds
     let scrolled_window = gtk::ScrolledWindow::new();
     scrolled_window.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
-    
-    // Set a safe maximum height (e.g., 400 pixels) so it fits anywhere on screen
     scrolled_window.set_max_content_height(400);
     scrolled_window.set_propagate_natural_height(true);
     
