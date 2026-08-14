@@ -1,6 +1,8 @@
+use anyhow::{Context, Result};
 use gtk4 as gtk;
 
 use crate::config::Config;
+use crate::state::app_state::AppState;
 use crate::state::geometry::Stroke;
 
 pub fn render_stroke(
@@ -86,4 +88,34 @@ pub fn render_stroke(
     cr.move_to(start_x, start_y);
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");
+}
+
+pub fn render_scene(
+    cr: &gtk::cairo::Context,
+    state: &AppState,
+    config: &Config,
+    is_transparent: bool,
+) -> Result<()> {
+    if is_transparent {
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+        cr.set_operator(gtk::cairo::Operator::Clear);
+        cr.paint().context("Failed to paint clear background")?;
+        cr.set_operator(gtk::cairo::Operator::Over);
+    } else {
+        let [bg_r, bg_g, bg_b, bg_a] = config.background_color;
+        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
+        cr.set_operator(gtk::cairo::Operator::Source);
+        cr.paint().context("Failed to paint solid background")?;
+        cr.set_operator(gtk::cairo::Operator::Over);
+    }
+
+    for stroke in &state.strokes {
+        render_stroke(cr, stroke.as_ref(), is_transparent, config);
+    }
+
+    if let Some(current) = &state.current_stroke {
+        render_stroke(cr, current, is_transparent, config);
+    }
+
+    Ok(())
 }

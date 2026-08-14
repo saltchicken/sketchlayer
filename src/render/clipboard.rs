@@ -4,7 +4,7 @@ use gtk::prelude::*;
 use gtk4 as gtk;
 use tracing::info;
 
-use crate::render::stroke::render_stroke;
+use crate::render::stroke::render_scene;
 use crate::state::app_state::AppState;
 
 pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result<()> {
@@ -15,31 +15,12 @@ pub fn copy_to_clipboard(window: &ApplicationWindow, state: &AppState) -> Result
     export_config.transparent_background = false;
     export_config.background_color = [1.0, 1.0, 1.0, 1.0];
 
-    let is_transparent = false;
-    let [bg_r, bg_g, bg_b, bg_a] = export_config.background_color;
-
     let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, width, height)
         .map_err(|e| anyhow!("Failed to create surface for clipboard: {:?}", e))?;
 
     let cr = gtk::cairo::Context::new(&surface).context("Failed to create cairo context")?;
 
-    if is_transparent {
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-        cr.set_operator(gtk::cairo::Operator::Clear);
-    } else {
-        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
-        cr.set_operator(gtk::cairo::Operator::Source);
-    }
-    cr.paint().context("Failed to paint background")?;
-    cr.set_operator(gtk::cairo::Operator::Over);
-
-    for stroke in &state.strokes {
-        render_stroke(&cr, stroke.as_ref(), is_transparent, &export_config);
-    }
-
-    if let Some(current) = &state.current_stroke {
-        render_stroke(&cr, current, is_transparent, &export_config);
-    }
+    render_scene(&cr, state, &export_config, false)?;
 
     surface.flush();
 
@@ -88,9 +69,6 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
     export_config.transparent_background = false;
     export_config.background_color = [1.0, 1.0, 1.0, 1.0];
 
-    let is_transparent = false;
-    let [bg_r, bg_g, bg_b, bg_a] = export_config.background_color;
-
     let surface = gtk::cairo::ImageSurface::create(
         gtk::cairo::Format::ARgb32,
         cell_w as i32,
@@ -101,25 +79,7 @@ pub fn copy_main_grid_to_clipboard(window: &ApplicationWindow, state: &AppState)
 
     cr.translate(-main_x, -main_y);
 
-    if is_transparent {
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
-        cr.set_operator(gtk::cairo::Operator::Clear);
-        cr.paint().context("Failed to paint background")?;
-        cr.set_operator(gtk::cairo::Operator::Over);
-    } else {
-        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a);
-        cr.set_operator(gtk::cairo::Operator::Source);
-        cr.paint().context("Failed to paint background")?;
-        cr.set_operator(gtk::cairo::Operator::Over);
-    }
-
-    for stroke in &state.strokes {
-        render_stroke(&cr, stroke.as_ref(), is_transparent, &export_config);
-    }
-
-    if let Some(current) = &state.current_stroke {
-        render_stroke(&cr, current, is_transparent, &export_config);
-    }
+    render_scene(&cr, state, &export_config, false)?;
 
     surface.flush();
 
