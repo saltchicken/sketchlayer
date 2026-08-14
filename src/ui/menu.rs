@@ -460,8 +460,11 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     scrolled_window.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
     
     // We can safely increase max_height slightly to comfortably accommodate the native picker
-    scrolled_window.set_max_content_height(500);
+    scrolled_window.set_max_content_height(600); 
     scrolled_window.set_propagate_natural_height(true);
+
+    // ADD THIS: Force a wider minimum width (e.g., 350 pixels)
+    scrolled_window.set_min_content_width(350);
     
     scrolled_window.set_child(Some(&menu_box));
     popover.set_child(Some(&scrolled_window));
