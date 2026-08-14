@@ -1,5 +1,5 @@
 use gtk::prelude::*;
-use gtk::{ApplicationWindow, Button, CssProvider, DrawingArea, Orientation, Popover, glib};
+use gtk::{ApplicationWindow, Button, DrawingArea, Orientation, Popover, glib};
 use gtk4 as gtk;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,45 +9,6 @@ use crate::render::{
     copy_main_grid_to_clipboard, copy_to_clipboard, save_grids, save_main_grid_png, save_sketch, save_sketch_png
 };
 use crate::state::AppState;
-
-fn create_color_button(
-    name: &str,
-    color_val: (f64, f64, f64),
-    state: Rc<RefCell<AppState>>,
-) -> Button {
-    let btn = Button::builder().tooltip_text(name).build();
-    let (r, g, b) = color_val;
-
-    let class_name = format!("color-btn-{}", name.to_lowercase());
-    btn.add_css_class(&class_name);
-
-    let css = format!(
-        ".{} {{ background: rgba({}, {}, {}, 1.0); min-width: 24px; min-height: 24px; border-radius: 12px; }}",
-        class_name,
-        (r * 255.0) as i32,
-        (g * 255.0) as i32,
-        (b * 255.0) as i32
-    );
-
-    let provider = CssProvider::new();
-    provider.load_from_data(&css);
-    
-    gtk::style_context_add_provider_for_display(
-        &gtk::gdk::Display::default().expect("Could not connect to a display."),
-        &provider,
-        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
-
-    btn.connect_clicked(glib::clone!(
-        #[strong]
-        state,
-        move |_| {
-            state.borrow_mut().current_color = color_val;
-        }
-    ));
-
-    btn
-}
 
 pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) -> Popover {
     let popover = Popover::new();
@@ -60,26 +21,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.set_margin_start(4);
     menu_box.set_margin_end(4);
 
-    // 1. Preset colors
-    let color_box = gtk::Box::new(Orientation::Horizontal, 4);
-    color_box.set_halign(gtk::Align::Center);
-    color_box.set_margin_bottom(4);
-
-    let colors = [
-        ("White", (1.0, 1.0, 1.0)),
-        ("Red", (1.0, 0.2, 0.2)),
-        ("Green", (0.2, 1.0, 0.2)),
-        ("Blue", (0.2, 0.5, 1.0)),
-        ("Yellow", (1.0, 1.0, 0.2)),
-        ("Black", (0.0, 0.0, 0.0)),
-    ];
-
-    for (name, color_val) in colors {
-        color_box.append(&create_color_button(name, color_val, state.clone()));
-    }
-    menu_box.append(&color_box);
-
-    // 2. Custom Color Picker Widget via Nested Popover
+    // Custom Color Picker Widget via Nested Popover
     #[allow(deprecated)]
     {
         let custom_color_box = gtk::Box::new(Orientation::Horizontal, 8);
