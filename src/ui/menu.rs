@@ -40,6 +40,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         color_menu_btn.set_always_show_arrow(true);
 
         let color_popover = gtk::Popover::new();
+        
+        // Wrap the chooser and a back button inside a vertical box
+        let color_chooser_box = gtk::Box::new(Orientation::Vertical, 4);
         let color_chooser = gtk::ColorChooserWidget::new();
         color_chooser.set_use_alpha(false);
 
@@ -59,7 +62,25 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             }
         ));
 
-        color_popover.set_child(Some(&color_chooser));
+        // Add a back button to exit the custom color editor
+        let back_btn = gtk::Button::with_label("Back to Palette");
+        back_btn.connect_clicked(glib::clone!(
+            #[weak] color_chooser,
+            move |_| {
+                color_chooser.set_property("show-editor", false);
+            }
+        ));
+
+        // Bind the visibility of the back button to whether the editor is shown
+        color_chooser
+            .bind_property("show-editor", &back_btn, "visible")
+            .sync_create()
+            .build();
+
+        color_chooser_box.append(&back_btn);
+        color_chooser_box.append(&color_chooser);
+
+        color_popover.set_child(Some(&color_chooser_box));
         color_menu_btn.set_popover(Some(&color_popover));
         
         custom_color_box.append(&custom_color_label);
