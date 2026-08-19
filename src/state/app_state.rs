@@ -18,6 +18,7 @@ pub struct AppState {
     pub current_stroke: Option<Stroke>,
     pub current_erased: Vec<Rc<Stroke>>,
     pub is_erasing: bool,
+    pub active_button: u32,
     pub erase_mode: EraseMode,
 
     pub current_color: (f64, f64, f64),
@@ -49,6 +50,7 @@ impl AppState {
             current_stroke: None,
             current_erased: Vec::new(),
             is_erasing: false,
+            active_button: 0,
             erase_mode: EraseMode::Vector,
 
             current_color: (0.0, 0.0, 0.0),

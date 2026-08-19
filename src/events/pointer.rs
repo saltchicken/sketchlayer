@@ -23,7 +23,15 @@ pub fn setup_stylus_events(
         #[weak]
         popover,
         move |gesture, x, y| {
-            let button = gesture.current_button();
+            // Accurately extract the button that triggered the event,
+            // falling back to the gesture's state if not a ButtonEvent.
+            let mut button = gesture.current_button();
+            if let Some(event) = gesture.current_event() {
+                if let Some(btn_event) = event.downcast_ref::<gtk::gdk::ButtonEvent>() {
+                    button = btn_event.button();
+                }
+            }
+
             let modifiers = gesture
                 .current_event()
                 .map(|e| e.modifier_state())
@@ -36,16 +44,19 @@ pub fn setup_stylus_events(
 
                 let mut state = state.borrow_mut();
                 state.is_erasing = false;
+                state.active_button = 0;
                 state.current_stroke = None;
                 return;
             }
 
             let mut state = state.borrow_mut();
 
-            // Prevent the eraser button (or any secondary input) from interfering if we are already drawing
-            if state.current_stroke.is_some() {
+            // Prevent secondary inputs from interfering if we are already in an action
+            if state.current_stroke.is_some() || state.is_erasing {
                 return;
             }
+            
+            state.active_button = button;
 
             // Button 2 (Usually upper barrel / middle-click) -> Eraser
             let is_eraser_tool = button == 2
@@ -104,8 +115,25 @@ pub fn setup_stylus_events(
         state,
         #[weak]
         drawing_area,
-        move |_gesture, _x, _y| {
+        move |gesture, _x, _y| {
             let mut s = state.borrow_mut();
+            
+            // Bypass GestureSingle's tracker and inspect the raw event 
+            // to accurately identify the physical button that was released.
+            let mut released_button = gesture.current_button();
+            if let Some(event) = gesture.current_event() {
+                if let Some(btn_event) = event.downcast_ref::<gtk::gdk::ButtonEvent>() {
+                    released_button = btn_event.button();
+                }
+            }
+
+            // Ignore releases from explicitly different buttons, but allow `0`.
+            // GTK frequently reports button 0 when the tip is lifted / sequence ends.
+            if s.active_button != 0 && released_button != 0 && s.active_button != released_button {
+                return;
+            }
+            
+            s.active_button = 0;
 
             if s.is_erasing {
                 s.is_erasing = false;
