@@ -40,6 +40,13 @@ pub fn setup_stylus_events(
                 return;
             }
 
+            let mut state = state.borrow_mut();
+
+            // Prevent the eraser button (or any secondary input) from interfering if we are already drawing
+            if state.current_stroke.is_some() {
+                return;
+            }
+
             // Button 2 (Usually upper barrel / middle-click) -> Eraser
             let is_eraser_tool = button == 2
                 || modifiers.contains(gtk::gdk::ModifierType::BUTTON2_MASK)
@@ -48,18 +55,21 @@ pub fn setup_stylus_events(
                     .device_tool()
                     .map_or(false, |t| t.tool_type() == gtk::gdk::DeviceToolType::Eraser);
 
-            let mut state = state.borrow_mut();
             let erase_mode = state.erase_mode;
             let (cx, cy) = state.screen_to_canvas(x, y);
+            let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
 
             if is_eraser_tool && erase_mode == EraseMode::Vector {
                 state.is_erasing = true;
                 state.current_erased.clear();
-                if state.erase_at(cx, cy) {
-                    drawing_area.queue_draw();
+                
+                // Only immediately erase if making contact (pressure > 0.0)
+                if pressure > 0.0 {
+                    if state.erase_at(cx, cy) {
+                        drawing_area.queue_draw();
+                    }
                 }
             } else {
-                let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
                 state.start_stroke(cx, cy, pressure, is_eraser_tool);
             }
         }
@@ -73,13 +83,16 @@ pub fn setup_stylus_events(
         move |gesture, x, y| {
             let mut s = state.borrow_mut();
             let (cx, cy) = s.screen_to_canvas(x, y);
+            let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
 
             if s.is_erasing {
-                if s.erase_at(cx, cy) {
-                    drawing_area.queue_draw();
+                // Only erase if making contact (pressure > 0.0)
+                if pressure > 0.0 {
+                    if s.erase_at(cx, cy) {
+                        drawing_area.queue_draw();
+                    }
                 }
             } else if s.current_stroke.is_some() {
-                let pressure = gesture.axis(gtk::gdk::AxisUse::Pressure).unwrap_or(1.0);
                 s.continue_stroke(cx, cy, pressure);
                 drawing_area.queue_draw();
             }
