@@ -50,8 +50,8 @@ impl Default for Config {
             show_vanishing_points: false,
             show_vanishing_point_lines: false,
             vp_line_angle_step: 15.0,
-            vp1: [0.0, 540.0],       // Left horizon
-            vp2: [1920.0, 540.0],    // Right horizon
+            vp1: [240.0, 540.0],       // Left horizon
+            vp2: [1680.0, 540.0],    // Right horizon
             vp3: [960.0, 2160.0],    // Nadir (far below center to prevent extreme distortion)
             transparent_background: true,
             background_color: [1.0, 1.0, 1.0, 1.0],
