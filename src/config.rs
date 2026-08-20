@@ -46,9 +46,9 @@ impl Default for Config {
             frame_offset_y: 0.0,
             show_frames: false,
             show_vanishing_points: false,
-            vp1: [0.0, 0.0],       // Top left of main frame
-            vp2: [1920.0, 0.0],      // Top right of main frame
-            vp3: [960.0, 1640.0],    // Below center of main frame
+            vp1: [0.0, 540.0],       // Left horizon
+            vp2: [1920.0, 540.0],    // Right horizon
+            vp3: [960.0, 2160.0],    // Nadir (far below center to prevent extreme distortion)
             transparent_background: true,
             background_color: [1.0, 1.0, 1.0, 1.0],
             target_monitor: None,
