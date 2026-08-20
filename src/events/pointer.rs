@@ -151,6 +151,35 @@ pub fn setup_stylus_events(
     ));
 
     drawing_area.add_controller(stylus);
+
+    // Track Stylus and Pointer Hover Motion
+    let hover_controller = gtk::EventControllerMotion::new();
+    hover_controller.connect_motion(glib::clone!(
+        #[strong] state,
+        #[weak] drawing_area,
+        move |_controller, x, y| {
+            let mut s = state.borrow_mut();
+            if s.config.show_vanishing_points {
+                let (cx, cy) = s.screen_to_canvas(x, y);
+                s.hover_pos = Some((cx, cy));
+                drawing_area.queue_draw();
+            }
+        }
+    ));
+
+    hover_controller.connect_leave(glib::clone!(
+        #[strong] state,
+        #[weak] drawing_area,
+        move |_controller| {
+            let mut s = state.borrow_mut();
+            if s.hover_pos.is_some() {
+                s.hover_pos = None;
+                drawing_area.queue_draw();
+            }
+        }
+    ));
+
+    drawing_area.add_controller(hover_controller);
 }
 
 pub fn setup_view_events(

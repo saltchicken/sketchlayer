@@ -93,6 +93,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
     let btn_frames = Button::with_label("Toggle Frame Guides");
+    let btn_vp = Button::with_label("Toggle Vanishing Points");
     let btn_reset_view = Button::with_label("Reset View");
 
     let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
@@ -170,6 +171,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_redo);
     menu_box.append(&btn_bg);
     menu_box.append(&btn_frames);
+    menu_box.append(&btn_vp);
     menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
     menu_box.append(&pen_width_box);
@@ -255,6 +257,26 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             {
                 let mut s = state.borrow_mut();
                 s.config.show_frames = !s.config.show_frames;
+            }
+            drawing_area.queue_draw();
+            popover.popdown();
+        }
+    ));
+
+    btn_vp.connect_clicked(glib::clone!(
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
+        move |_| {
+            {
+                let mut s = state.borrow_mut();
+                s.config.show_vanishing_points = !s.config.show_vanishing_points;
+                if !s.config.show_vanishing_points {
+                    s.hover_pos = None;
+                }
             }
             drawing_area.queue_draw();
             popover.popdown();
@@ -528,7 +550,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     scrolled_window.set_max_content_height(600); 
     scrolled_window.set_propagate_natural_height(true);
 
-    // ADD THIS: Force a wider minimum width (e.g., 350 pixels)
+    // Force a wider minimum width (e.g., 350 pixels)
     scrolled_window.set_min_content_width(350);
     
     scrolled_window.set_child(Some(&menu_box));

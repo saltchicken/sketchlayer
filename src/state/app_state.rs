@@ -20,13 +20,14 @@ pub struct AppState {
     pub is_erasing: bool,
     pub active_button: u32,
     pub erase_mode: EraseMode,
+    pub hover_pos: Option<(f64, f64)>, // Canvas coordinates for hover guides
 
     pub current_color: (f64, f64, f64),
     pub config: Config,
 
     pub current_file: Option<PathBuf>,
 
-    pub spatial_index: SpatialIndex, // <-- NEW
+    pub spatial_index: SpatialIndex, 
 
     // View Transformation
     pub zoom: f64,
@@ -52,6 +53,7 @@ impl AppState {
             is_erasing: false,
             active_button: 0,
             erase_mode: EraseMode::Vector,
+            hover_pos: None,
 
             current_color: (0.0, 0.0, 0.0),
             config: Config::load(),

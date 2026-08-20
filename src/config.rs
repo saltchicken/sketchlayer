@@ -17,6 +17,10 @@ pub struct Config {
     pub frame_offset_x: f64,
     pub frame_offset_y: f64,
     pub show_frames: bool,
+    pub show_vanishing_points: bool,
+    pub vp1: [f64; 2],
+    pub vp2: [f64; 2],
+    pub vp3: [f64; 2],
     pub transparent_background: bool,
     pub background_color: [f64; 4],
     pub target_monitor: Option<String>,
@@ -41,6 +45,10 @@ impl Default for Config {
             frame_offset_x: 0.0,
             frame_offset_y: 0.0,
             show_frames: false,
+            show_vanishing_points: false,
+            vp1: [0.0, 0.0],       // Top left of main frame
+            vp2: [1920.0, 0.0],      // Top right of main frame
+            vp3: [960.0, 1640.0],    // Below center of main frame
             transparent_background: true,
             background_color: [1.0, 1.0, 1.0, 1.0],
             target_monitor: None,
