@@ -134,8 +134,21 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                 ];
 
                 for vp in vps {
-                    cr.move_to(hx, hy);
-                    cr.line_to(vp[0], vp[1]);
+                    let dx = hx - vp[0];
+                    let dy = hy - vp[1];
+                    let dist = (dx * dx + dy * dy).sqrt();
+
+                    // Only draw if we aren't hovering directly on top of the vanishing point 
+                    // to prevent division by zero or weird rendering artifacts
+                    if dist > 0.1 {
+                        // Project the line outwards to an arbitrarily large distance
+                        let ext_len = 50000.0;
+                        let end_x = vp[0] + (dx / dist) * ext_len;
+                        let end_y = vp[1] + (dy / dist) * ext_len;
+
+                        cr.move_to(vp[0], vp[1]);
+                        cr.line_to(end_x, end_y);
+                    }
                 }
                 
                 cr.stroke().expect("Failed to draw vanishing point guides");
