@@ -84,9 +84,15 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
 
         // Draw vanishing points helper
-        // Active when enabled, hovering over the window, and not currently making a stroke
-        if state.config.show_vanishing_points && state.current_stroke.is_none() {
-            if let Some((hx, hy)) = state.hover_pos {
+        if state.config.show_vanishing_points {
+            // Determine the anchor point: either the start of the current stroke, or the hover position
+            let anchor = if let Some(stroke) = &state.current_stroke {
+                stroke.points.first().map(|p| (p.x, p.y))
+            } else {
+                state.hover_pos
+            };
+
+            if let Some((hx, hy)) = anchor {
                 cr.save().expect("Failed to save VP state");
                 let is_dark_bg = {
                     let luminance = 0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b;
