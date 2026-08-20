@@ -18,6 +18,8 @@ pub struct Config {
     pub frame_offset_y: f64,
     pub show_frames: bool,
     pub show_vanishing_points: bool,
+    pub show_vanishing_point_lines: bool,
+    pub vp_line_angle_step: f64,
     pub vp1: [f64; 2],
     pub vp2: [f64; 2],
     pub vp3: [f64; 2],
@@ -46,6 +48,8 @@ impl Default for Config {
             frame_offset_y: 0.0,
             show_frames: false,
             show_vanishing_points: false,
+            show_vanishing_point_lines: false,
+            vp_line_angle_step: 15.0,
             vp1: [0.0, 540.0],       // Left horizon
             vp2: [1920.0, 540.0],    // Right horizon
             vp3: [960.0, 2160.0],    // Nadir (far below center to prevent extreme distortion)

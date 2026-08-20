@@ -83,77 +83,110 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             render_stroke(cr, current, is_transparent, &state.config);
         }
 
-        // Draw vanishing points helper
-        if state.config.show_vanishing_points {
-            // Determine the anchor point: either the start of the current stroke, or the hover position
-            let anchor = if let Some(stroke) = &state.current_stroke {
-                stroke.points.first().map(|p| (p.x, p.y))
-            } else {
-                state.hover_pos
+        // Draw vanishing points helper and perspective grid
+        if state.config.show_vanishing_points || state.config.show_vanishing_point_lines {
+            cr.save().expect("Failed to save VP state");
+            
+            let frame_w = state.config.frame_width;
+            let frame_h = state.config.frame_height;
+
+            // Find the main frame relative to the center of the viewport
+            let mut start_x = state.config.frame_offset_x % frame_w;
+            if start_x < 0.0 { start_x += frame_w; }
+            let mut start_y = state.config.frame_offset_y % frame_h;
+            if start_y < 0.0 { start_y += frame_h; }
+
+            let (canvas_center_x, canvas_center_y) = state.screen_to_canvas(w as f64 / 2.0, h as f64 / 2.0);
+
+            let c = ((canvas_center_x - start_x) / frame_w).floor() as i32;
+            let r = ((canvas_center_y - start_y) / frame_h).floor() as i32;
+
+            let main_x = start_x + c as f64 * frame_w;
+            let main_y = start_y + r as f64 * frame_h;
+
+            // Offset the configured vanishing points by the main frame's origin
+            let vps = [
+                [main_x + state.config.vp1[0], main_y + state.config.vp1[1]],
+                [main_x + state.config.vp2[0], main_y + state.config.vp2[1]],
+                [main_x + state.config.vp3[0], main_y + state.config.vp3[1]],
+            ];
+
+            let is_dark_bg = {
+                let luminance = 0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b;
+                !is_transparent && luminance < 0.5
             };
+            
+            let ext_len = 50000.0;
 
-            if let Some((hx, hy)) = anchor {
-                cr.save().expect("Failed to save VP state");
-                let is_dark_bg = {
-                    let luminance = 0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b;
-                    !is_transparent && luminance < 0.5
-                };
-                
+            // Render static perspective grid
+            if state.config.show_vanishing_point_lines {
                 if is_dark_bg {
-                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.5);
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.15);
                 } else {
-                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.5);
+                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.15);
                 }
-
+                
                 cr.set_line_width(1.0 / state.zoom);
-                let dash_len = 5.0 / state.zoom;
-                cr.set_dash(&[dash_len, dash_len], 0.0);
+                cr.set_dash(&[], 0.0);
 
-                let frame_w = state.config.frame_width;
-                let frame_h = state.config.frame_height;
-
-                // Find the main frame relative to the center of the viewport
-                let mut start_x = state.config.frame_offset_x % frame_w;
-                if start_x < 0.0 { start_x += frame_w; }
-                let mut start_y = state.config.frame_offset_y % frame_h;
-                if start_y < 0.0 { start_y += frame_h; }
-
-                let (canvas_center_x, canvas_center_y) = state.screen_to_canvas(w as f64 / 2.0, h as f64 / 2.0);
-
-                let c = ((canvas_center_x - start_x) / frame_w).floor() as i32;
-                let r = ((canvas_center_y - start_y) / frame_h).floor() as i32;
-
-                let main_x = start_x + c as f64 * frame_w;
-                let main_y = start_y + r as f64 * frame_h;
-
-                // Offset the configured vanishing points by the main frame's origin
-                let vps = [
-                    [main_x + state.config.vp1[0], main_y + state.config.vp1[1]],
-                    [main_x + state.config.vp2[0], main_y + state.config.vp2[1]],
-                    [main_x + state.config.vp3[0], main_y + state.config.vp3[1]],
-                ];
-
-                for vp in vps {
-                    let dx = hx - vp[0];
-                    let dy = hy - vp[1];
-                    let dist = (dx * dx + dy * dy).sqrt();
-
-                    // Only draw if we aren't hovering directly on top of the vanishing point 
-                    // to prevent division by zero or weird rendering artifacts
-                    if dist > 0.1 {
-                        // Project the line outwards to an arbitrarily large distance
-                        let ext_len = 50000.0;
-                        let end_x = vp[0] + (dx / dist) * ext_len;
-                        let end_y = vp[1] + (dy / dist) * ext_len;
-
+                let step_rad = (state.config.vp_line_angle_step.max(0.1)).to_radians();
+                
+                for vp in &vps {
+                    let mut angle: f64 = 0.0;
+                    while angle < std::f64::consts::PI * 2.0 {
+                        let end_x = vp[0] + angle.cos() * ext_len;
+                        let end_y = vp[1] + angle.sin() * ext_len;
+                        
                         cr.move_to(vp[0], vp[1]);
                         cr.line_to(end_x, end_y);
+                        
+                        angle += step_rad;
                     }
                 }
                 
-                cr.stroke().expect("Failed to draw vanishing point guides");
-                cr.restore().expect("Failed to restore VP state");
+                cr.stroke().expect("Failed to draw perspective grid");
             }
+
+            // Render dynamic context-aware hover guides
+            if state.config.show_vanishing_points {
+                let anchor = if let Some(stroke) = &state.current_stroke {
+                    stroke.points.first().map(|p| (p.x, p.y))
+                } else {
+                    state.hover_pos
+                };
+
+                if let Some((hx, hy)) = anchor {
+                    if is_dark_bg {
+                        cr.set_source_rgba(1.0, 1.0, 1.0, 0.5);
+                    } else {
+                        cr.set_source_rgba(0.0, 0.0, 0.0, 0.5);
+                    }
+
+                    cr.set_line_width(1.0 / state.zoom);
+                    let dash_len = 5.0 / state.zoom;
+                    cr.set_dash(&[dash_len, dash_len], 0.0);
+
+                    for vp in &vps {
+                        let dx = hx - vp[0];
+                        let dy = hy - vp[1];
+                        let dist = (dx * dx + dy * dy).sqrt();
+
+                        // Only draw if we aren't hovering directly on top of the vanishing point 
+                        // to prevent division by zero or weird rendering artifacts
+                        if dist > 0.1 {
+                            let end_x = vp[0] + (dx / dist) * ext_len;
+                            let end_y = vp[1] + (dy / dist) * ext_len;
+
+                            cr.move_to(vp[0], vp[1]);
+                            cr.line_to(end_x, end_y);
+                        }
+                    }
+                    
+                    cr.stroke().expect("Failed to draw vanishing point guides");
+                }
+            }
+            
+            cr.restore().expect("Failed to restore VP state");
         }
 
         if state.config.show_frames {

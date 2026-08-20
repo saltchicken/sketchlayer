@@ -94,7 +94,20 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_bg = Button::with_label("Toggle Background");
     let btn_frames = Button::with_label("Toggle Frame Guides");
     let btn_vp = Button::with_label("Toggle Vanishing Points");
+    let btn_vp_lines = Button::with_label("Toggle Perspective Grid");
     let btn_reset_view = Button::with_label("Reset View");
+
+    let vp_angle_box = gtk::Box::new(Orientation::Horizontal, 8);
+    vp_angle_box.set_margin_start(4);
+    vp_angle_box.set_margin_end(4);
+    let vp_angle_label = gtk::Label::new(Some("Grid Angle:"));
+    let vp_angle_scale = gtk::Scale::with_range(Orientation::Horizontal, 1.0, 90.0, 1.0);
+    vp_angle_scale.set_digits(1);
+    vp_angle_scale.set_value(state.borrow().config.vp_line_angle_step);
+    vp_angle_scale.set_draw_value(true);
+    vp_angle_scale.set_hexpand(true);
+    vp_angle_box.append(&vp_angle_label);
+    vp_angle_box.append(&vp_angle_scale);
 
     let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
     opacity_box.set_margin_start(4);
@@ -172,6 +185,8 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_bg);
     menu_box.append(&btn_frames);
     menu_box.append(&btn_vp);
+    menu_box.append(&btn_vp_lines);
+    menu_box.append(&vp_angle_box);
     menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
     menu_box.append(&pen_width_box);
@@ -280,6 +295,37 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             }
             drawing_area.queue_draw();
             popover.popdown();
+        }
+    ));
+
+    btn_vp_lines.connect_clicked(glib::clone!(
+        #[weak]
+        drawing_area,
+        #[weak]
+        popover,
+        #[strong]
+        state,
+        move |_| {
+            {
+                let mut s = state.borrow_mut();
+                s.config.show_vanishing_point_lines = !s.config.show_vanishing_point_lines;
+            }
+            drawing_area.queue_draw();
+            popover.popdown();
+        }
+    ));
+
+    vp_angle_scale.connect_value_changed(glib::clone!(
+        #[weak]
+        drawing_area,
+        #[strong]
+        state,
+        move |scale| {
+            {
+                let mut s = state.borrow_mut();
+                s.config.vp_line_angle_step = scale.value();
+            }
+            drawing_area.queue_draw();
         }
     ));
 
