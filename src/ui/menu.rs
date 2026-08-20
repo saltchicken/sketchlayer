@@ -118,6 +118,18 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     pen_width_box.append(&pen_width_label);
     pen_width_box.append(&pen_width_scale);
 
+    let pen_pressure_box = gtk::Box::new(Orientation::Horizontal, 8);
+    pen_pressure_box.set_margin_start(4);
+    pen_pressure_box.set_margin_end(4);
+    let pen_pressure_label = gtk::Label::new(Some("Pen Pressure:"));
+    let pen_pressure_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 50.0, 0.1);
+    pen_pressure_scale.set_digits(1);
+    pen_pressure_scale.set_value(state.borrow().config.pen_pressure_mult);
+    pen_pressure_scale.set_draw_value(true);
+    pen_pressure_scale.set_hexpand(true);
+    pen_pressure_box.append(&pen_pressure_label);
+    pen_pressure_box.append(&pen_pressure_scale);
+
     let eraser_width_box = gtk::Box::new(Orientation::Horizontal, 8);
     eraser_width_box.set_margin_start(4);
     eraser_width_box.set_margin_end(4);
@@ -129,6 +141,18 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     eraser_width_scale.set_hexpand(true);
     eraser_width_box.append(&eraser_width_label);
     eraser_width_box.append(&eraser_width_scale);
+
+    let eraser_pressure_box = gtk::Box::new(Orientation::Horizontal, 8);
+    eraser_pressure_box.set_margin_start(4);
+    eraser_pressure_box.set_margin_end(4);
+    let eraser_pressure_label = gtk::Label::new(Some("Eraser Pressure:"));
+    let eraser_pressure_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 0.1);
+    eraser_pressure_scale.set_digits(1);
+    eraser_pressure_scale.set_value(state.borrow().config.eraser_pressure_mult);
+    eraser_pressure_scale.set_draw_value(true);
+    eraser_pressure_scale.set_hexpand(true);
+    eraser_pressure_box.append(&eraser_pressure_label);
+    eraser_pressure_box.append(&eraser_pressure_scale);
 
     let btn_save_state = Button::with_label("Save State (.sketchlayer)");
     let btn_save = Button::with_label("Save Full Sketch (SVG)");
@@ -149,7 +173,9 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
     menu_box.append(&pen_width_box);
+    menu_box.append(&pen_pressure_box);
     menu_box.append(&eraser_width_box);
+    menu_box.append(&eraser_pressure_box);
     menu_box.append(&btn_save_state);
     menu_box.append(&btn_save);
     menu_box.append(&btn_save_png);
@@ -268,12 +294,30 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         }
     ));
 
+    pen_pressure_scale.connect_value_changed(glib::clone!(
+        #[strong]
+        state,
+        move |scale| {
+            let mut s = state.borrow_mut();
+            s.config.pen_pressure_mult = scale.value();
+        }
+    ));
+
     eraser_width_scale.connect_value_changed(glib::clone!(
         #[strong]
         state,
         move |scale| {
             let mut s = state.borrow_mut();
             s.config.base_eraser_width = scale.value();
+        }
+    ));
+
+    eraser_pressure_scale.connect_value_changed(glib::clone!(
+        #[strong]
+        state,
+        move |scale| {
+            let mut s = state.borrow_mut();
+            s.config.eraser_pressure_mult = scale.value();
         }
     ));
 
