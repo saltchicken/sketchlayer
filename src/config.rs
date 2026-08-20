@@ -20,9 +20,11 @@ pub struct Config {
     pub show_vanishing_points: bool,
     pub show_vanishing_point_lines: bool,
     pub vp_line_angle_step: f64,
+    pub vp_1pt: [f64; 2],
     pub vp1: [f64; 2],
     pub vp2: [f64; 2],
     pub vp3: [f64; 2],
+    pub perspective_mode: usize,
     pub transparent_background: bool,
     pub background_color: [f64; 4],
     pub target_monitor: Option<String>,
@@ -50,9 +52,11 @@ impl Default for Config {
             show_vanishing_points: false,
             show_vanishing_point_lines: false,
             vp_line_angle_step: 15.0,
-            vp1: [240.0, 540.0],       // Left horizon
-            vp2: [1680.0, 540.0],    // Right horizon
+            vp_1pt: [960.0, 270.0],  // Center default for 1-point perspective
+            vp1: [240.0, 270.0],     // Left horizon
+            vp2: [1680.0, 270.0],    // Right horizon
             vp3: [960.0, 2160.0],    // Nadir (far below center to prevent extreme distortion)
+            perspective_mode: 3,     // 1, 2, or 3-point perspective
             transparent_background: true,
             background_color: [1.0, 1.0, 1.0, 1.0],
             target_monitor: None,

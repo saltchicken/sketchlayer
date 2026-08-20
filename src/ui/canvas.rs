@@ -104,12 +104,24 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             let main_x = start_x + c as f64 * frame_w;
             let main_y = start_y + r as f64 * frame_h;
 
-            // Offset the configured vanishing points by the main frame's origin
-            let vps = [
-                [main_x + state.config.vp1[0], main_y + state.config.vp1[1]],
-                [main_x + state.config.vp2[0], main_y + state.config.vp2[1]],
-                [main_x + state.config.vp3[0], main_y + state.config.vp3[1]],
-            ];
+            let mode = state.config.perspective_mode.clamp(1, 3);
+            
+            // Build the vanishing point array dynamically depending on mode
+            let vps = if mode == 1 {
+                [
+                    [main_x + state.config.vp_1pt[0], main_y + state.config.vp_1pt[1]],
+                    [0.0, 0.0], // Unused in mode 1
+                    [0.0, 0.0], // Unused in mode 1
+                ]
+            } else {
+                [
+                    [main_x + state.config.vp1[0], main_y + state.config.vp1[1]],
+                    [main_x + state.config.vp2[0], main_y + state.config.vp2[1]],
+                    [main_x + state.config.vp3[0], main_y + state.config.vp3[1]],
+                ]
+            };
+            
+            let active_vps = &vps[0..mode];
 
             let is_dark_bg = {
                 let luminance = 0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b;
@@ -131,7 +143,7 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
 
                 let step_rad = (state.config.vp_line_angle_step.max(0.1)).to_radians();
                 
-                for vp in &vps {
+                for vp in active_vps {
                     let mut angle: f64 = 0.0;
                     while angle < std::f64::consts::PI * 2.0 {
                         let end_x = vp[0] + angle.cos() * ext_len;
@@ -166,7 +178,7 @@ pub fn setup_drawing_area(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
                     let dash_len = 5.0 / state.zoom;
                     cr.set_dash(&[dash_len, dash_len], 0.0);
 
-                    for vp in &vps {
+                    for vp in active_vps {
                         let dx = hx - vp[0];
                         let dy = hy - vp[1];
                         let dist = (dx * dx + dy * dy).sqrt();

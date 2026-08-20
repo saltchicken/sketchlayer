@@ -95,6 +95,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_frames = Button::with_label("Toggle Frame Guides");
     let btn_vp = Button::with_label("Toggle Vanishing Points");
     let btn_vp_lines = Button::with_label("Toggle Perspective Grid");
+    
+    let current_persp_mode = state.borrow().config.perspective_mode.clamp(1, 3);
+    let btn_persp_mode = Button::with_label(&format!("Perspective: {}-Point", current_persp_mode));
+    
     let btn_reset_view = Button::with_label("Reset View");
 
     let vp_angle_box = gtk::Box::new(Orientation::Horizontal, 8);
@@ -186,6 +190,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     menu_box.append(&btn_frames);
     menu_box.append(&btn_vp);
     menu_box.append(&btn_vp_lines);
+    menu_box.append(&btn_persp_mode);
     menu_box.append(&vp_angle_box);
     menu_box.append(&btn_reset_view);
     menu_box.append(&opacity_box);
@@ -312,6 +317,21 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
             }
             drawing_area.queue_draw();
             popover.popdown();
+        }
+    ));
+
+    btn_persp_mode.connect_clicked(glib::clone!(
+        #[weak] drawing_area,
+        #[strong] state,
+        move |btn| {
+            {
+                let mut s = state.borrow_mut();
+                let mut mode = s.config.perspective_mode + 1;
+                if mode > 3 { mode = 1; }
+                s.config.perspective_mode = mode;
+                btn.set_label(&format!("Perspective: {}-Point", mode));
+            }
+            drawing_area.queue_draw();
         }
     ));
 
