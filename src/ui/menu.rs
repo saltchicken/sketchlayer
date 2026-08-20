@@ -88,7 +88,7 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         menu_box.append(&custom_color_box);
     }
 
-    let btn_erase_mode = Button::with_label("Erase Mode: Vector");
+    let btn_erase_mode = Button::with_label("Erase Mode: Pixel");
     let btn_undo = Button::with_label("Undo");
     let btn_redo = Button::with_label("Redo");
     let btn_bg = Button::with_label("Toggle Background");
@@ -194,12 +194,12 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         state,
         move |btn| {
             let mut s = state.borrow_mut();
-            if s.erase_mode == EraseMode::Vector {
-                s.erase_mode = EraseMode::Pixel;
-                btn.set_label("Erase Mode: Pixel");
-            } else {
+            if s.erase_mode == EraseMode::Pixel {
                 s.erase_mode = EraseMode::Vector;
                 btn.set_label("Erase Mode: Vector");
+            } else {
+                s.erase_mode = EraseMode::Pixel;
+                btn.set_label("Erase Mode: Pixel");
             }
         }
     ));

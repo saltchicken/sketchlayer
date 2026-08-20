@@ -52,7 +52,7 @@ impl AppState {
             current_erased: Vec::new(),
             is_erasing: false,
             active_button: 0,
-            erase_mode: EraseMode::Vector,
+            erase_mode: EraseMode::Pixel,
             hover_pos: None,
 
             current_color: (0.0, 0.0, 0.0),
