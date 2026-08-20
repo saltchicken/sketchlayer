@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use gtk4 as gtk;
+use std::f64::consts::PI;
 
 use crate::config::Config;
 use crate::state::app_state::AppState;
@@ -27,6 +28,7 @@ pub fn render_stroke(
         cr.set_operator(gtk::cairo::Operator::Over);
     }
 
+    // Use Butt caps to prevent internal segments from overlapping and stacking opacity
     cr.set_line_cap(gtk::cairo::LineCap::Butt);
     cr.set_line_join(gtk::cairo::LineJoin::Miter);
 
@@ -52,11 +54,33 @@ pub fn render_stroke(
         let p2 = &stroke.points[1];
 
         set_style(p1.pressure);
+        let radius = cr.line_width() / 2.0;
+        let theta = (p2.y - p1.y).atan2(p2.x - p1.x);
+
+        // Explicit Start cap (backward facing semi-circle)
+        cr.arc(p1.x, p1.y, radius, theta + PI / 2.0, theta + PI * 1.5);
+        cr.fill().expect("Failed to fill start cap");
+
         cr.move_to(p1.x, p1.y);
         cr.line_to(p2.x, p2.y);
         cr.stroke().expect("Failed to stroke path");
+
+        // Explicit End cap (forward facing semi-circle)
+        cr.arc(p2.x, p2.y, radius, theta - PI / 2.0, theta + PI / 2.0);
+        cr.fill().expect("Failed to fill end cap");
         return;
     }
+
+    let p0 = &stroke.points[0];
+    let p1 = &stroke.points[1];
+    
+    set_style(p0.pressure);
+    let radius_start = cr.line_width() / 2.0;
+    let theta_start = (p1.y - p0.y).atan2(p1.x - p0.x);
+
+    // Explicit Start cap
+    cr.arc(p0.x, p0.y, radius_start, theta_start + PI / 2.0, theta_start + PI * 1.5);
+    cr.fill().expect("Failed to fill start cap");
 
     let mut start_x = stroke.points[0].x;
     let mut start_y = stroke.points[0].y;
@@ -85,9 +109,16 @@ pub fn render_stroke(
 
     let p_last = &stroke.points[stroke.points.len() - 1];
     set_style(p_last.pressure);
+    
     cr.move_to(start_x, start_y);
     cr.line_to(p_last.x, p_last.y);
     cr.stroke().expect("Failed to stroke path");
+
+    // Explicit End cap 
+    let radius_end = cr.line_width() / 2.0;
+    let theta_end = (p_last.y - start_y).atan2(p_last.x - start_x);
+    cr.arc(p_last.x, p_last.y, radius_end, theta_end - PI / 2.0, theta_end + PI / 2.0);
+    cr.fill().expect("Failed to fill end cap");
 }
 
 pub fn render_scene(
