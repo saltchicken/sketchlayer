@@ -1,3 +1,4 @@
+// src/ui/menu.rs
 use gtk::prelude::*;
 use gtk::{ApplicationWindow, Button, DrawingArea, Orientation, Popover, glib};
 use gtk4 as gtk;
@@ -15,11 +16,19 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     popover.set_parent(drawing_area);
     popover.set_has_arrow(true);
 
-    let menu_box = gtk::Box::new(Orientation::Vertical, 4);
+    let menu_box = gtk::Box::new(Orientation::Vertical, 8);
     menu_box.set_margin_top(4);
     menu_box.set_margin_bottom(4);
     menu_box.set_margin_start(4);
     menu_box.set_margin_end(4);
+
+    // Group 1: Tools & Brushes
+    let tools_expander = gtk::Expander::new(Some("Tools & Brushes"));
+    tools_expander.set_expanded(true);
+    let tools_box = gtk::Box::new(Orientation::Vertical, 4);
+    tools_box.set_margin_start(8);
+    tools_box.set_margin_top(4);
+    tools_expander.set_child(Some(&tools_box));
 
     // Custom Color Picker Widget via Nested Popover
     #[allow(deprecated)]
@@ -85,45 +94,10 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
         
         custom_color_box.append(&custom_color_label);
         custom_color_box.append(&color_menu_btn);
-        menu_box.append(&custom_color_box);
+        tools_box.append(&custom_color_box);
     }
 
     let btn_erase_mode = Button::with_label("Erase Mode: Pixel");
-    let btn_undo = Button::with_label("Undo");
-    let btn_redo = Button::with_label("Redo");
-    let btn_bg = Button::with_label("Toggle Background");
-    let btn_frames = Button::with_label("Toggle Frame Guides");
-    let btn_vp = Button::with_label("Toggle Vanishing Points");
-    let btn_vp_lines = Button::with_label("Toggle Perspective Grid");
-    
-    let current_persp_mode = state.borrow().config.perspective_mode.clamp(1, 3);
-    let btn_persp_mode = Button::with_label(&format!("Perspective: {}-Point", current_persp_mode));
-    
-    let btn_reset_view = Button::with_label("Reset View");
-
-    let vp_angle_box = gtk::Box::new(Orientation::Horizontal, 8);
-    vp_angle_box.set_margin_start(4);
-    vp_angle_box.set_margin_end(4);
-    let vp_angle_label = gtk::Label::new(Some("Grid Angle:"));
-    let vp_angle_scale = gtk::Scale::with_range(Orientation::Horizontal, 1.0, 90.0, 1.0);
-    vp_angle_scale.set_digits(1);
-    vp_angle_scale.set_value(state.borrow().config.vp_line_angle_step);
-    vp_angle_scale.set_draw_value(true);
-    vp_angle_scale.set_hexpand(true);
-    vp_angle_box.append(&vp_angle_label);
-    vp_angle_box.append(&vp_angle_scale);
-
-    let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
-    opacity_box.set_margin_start(4);
-    opacity_box.set_margin_end(4);
-    let opacity_label = gtk::Label::new(Some("Opacity:"));
-    let opacity_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
-    opacity_scale.set_value(100.0);
-    opacity_scale.set_draw_value(true);
-    opacity_scale.set_hexpand(true);
-    opacity_box.append(&opacity_label);
-    opacity_box.append(&opacity_scale);
-
     let pen_width_box = gtk::Box::new(Orientation::Horizontal, 8);
     pen_width_box.set_margin_start(4);
     pen_width_box.set_margin_end(4);
@@ -172,6 +146,86 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     eraser_pressure_box.append(&eraser_pressure_label);
     eraser_pressure_box.append(&eraser_pressure_scale);
 
+    tools_box.append(&btn_erase_mode);
+    tools_box.append(&pen_width_box);
+    tools_box.append(&pen_pressure_box);
+    tools_box.append(&eraser_width_box);
+    tools_box.append(&eraser_pressure_box);
+
+
+    // Group 2: View & Guides
+    let view_expander = gtk::Expander::new(Some("View & Guides"));
+    let view_box = gtk::Box::new(Orientation::Vertical, 4);
+    view_box.set_margin_start(8);
+    view_box.set_margin_top(4);
+    view_expander.set_child(Some(&view_box));
+
+    let opacity_box = gtk::Box::new(Orientation::Horizontal, 8);
+    opacity_box.set_margin_start(4);
+    opacity_box.set_margin_end(4);
+    let opacity_label = gtk::Label::new(Some("Opacity:"));
+    let opacity_scale = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
+    opacity_scale.set_value(100.0);
+    opacity_scale.set_draw_value(true);
+    opacity_scale.set_hexpand(true);
+    opacity_box.append(&opacity_label);
+    opacity_box.append(&opacity_scale);
+
+    let btn_bg = Button::with_label("Toggle Background");
+    let btn_frames = Button::with_label("Toggle Frame Guides");
+    let btn_vp = Button::with_label("Toggle Vanishing Points");
+    let btn_vp_lines = Button::with_label("Toggle Perspective Grid");
+    
+    let current_persp_mode = state.borrow().config.perspective_mode.clamp(1, 3);
+    let btn_persp_mode = Button::with_label(&format!("Perspective: {}-Point", current_persp_mode));
+    
+    let btn_reset_view = Button::with_label("Reset View");
+
+    let vp_angle_box = gtk::Box::new(Orientation::Horizontal, 8);
+    vp_angle_box.set_margin_start(4);
+    vp_angle_box.set_margin_end(4);
+    let vp_angle_label = gtk::Label::new(Some("Grid Angle:"));
+    let vp_angle_scale = gtk::Scale::with_range(Orientation::Horizontal, 1.0, 90.0, 1.0);
+    vp_angle_scale.set_digits(1);
+    vp_angle_scale.set_value(state.borrow().config.vp_line_angle_step);
+    vp_angle_scale.set_draw_value(true);
+    vp_angle_scale.set_hexpand(true);
+    vp_angle_box.append(&vp_angle_label);
+    vp_angle_box.append(&vp_angle_scale);
+
+    view_box.append(&opacity_box);
+    view_box.append(&btn_bg);
+    view_box.append(&btn_frames);
+    view_box.append(&btn_vp);
+    view_box.append(&btn_vp_lines);
+    view_box.append(&btn_persp_mode);
+    view_box.append(&vp_angle_box);
+    view_box.append(&btn_reset_view);
+
+
+    // Group 3: Edit Canvas
+    let edit_expander = gtk::Expander::new(Some("Edit Canvas"));
+    let edit_box = gtk::Box::new(Orientation::Vertical, 4);
+    edit_box.set_margin_start(8);
+    edit_box.set_margin_top(4);
+    edit_expander.set_child(Some(&edit_box));
+
+    let btn_undo = Button::with_label("Undo");
+    let btn_redo = Button::with_label("Redo");
+    let btn_clear = Button::with_label("Clear Canvas");
+
+    edit_box.append(&btn_undo);
+    edit_box.append(&btn_redo);
+    edit_box.append(&btn_clear);
+
+
+    // Group 4: Save & Export
+    let export_expander = gtk::Expander::new(Some("Save & Export"));
+    let export_box = gtk::Box::new(Orientation::Vertical, 4);
+    export_box.set_margin_start(8);
+    export_box.set_margin_top(4);
+    export_expander.set_child(Some(&export_box));
+
     let btn_save_state = Button::with_label("Save State (.sketchlayer)");
     let btn_save = Button::with_label("Save Full Sketch (SVG)");
     let btn_save_png = Button::with_label("Save Full Sketch (PNG)");
@@ -179,36 +233,38 @@ pub fn build_context_menu(drawing_area: &DrawingArea, state: Rc<RefCell<AppState
     let btn_save_active_frame_png = Button::with_label("Save Active Frame (PNG)");
     let btn_copy = Button::with_label("Copy Full Screen");
     let btn_copy_active_frame = Button::with_label("Copy Active Frame");
-    let btn_clear = Button::with_label("Clear Canvas");
+
+    export_box.append(&btn_save_state);
+    export_box.append(&btn_save);
+    export_box.append(&btn_save_png);
+    export_box.append(&btn_save_frames);
+    export_box.append(&btn_save_active_frame_png);
+    export_box.append(&btn_copy);
+    export_box.append(&btn_copy_active_frame);
+
+
+    // Group 5: Application
+    let app_expander = gtk::Expander::new(Some("Application"));
+    let app_box = gtk::Box::new(Orientation::Vertical, 4);
+    app_box.set_margin_start(8);
+    app_box.set_margin_top(4);
+    app_expander.set_child(Some(&app_box));
+
     let btn_hide = Button::with_label("Hide Overlay");
     let btn_quit = Button::with_label("Quit");
 
-    menu_box.append(&btn_erase_mode);
-    menu_box.append(&btn_undo);
-    menu_box.append(&btn_redo);
-    menu_box.append(&btn_bg);
-    menu_box.append(&btn_frames);
-    menu_box.append(&btn_vp);
-    menu_box.append(&btn_vp_lines);
-    menu_box.append(&btn_persp_mode);
-    menu_box.append(&vp_angle_box);
-    menu_box.append(&btn_reset_view);
-    menu_box.append(&opacity_box);
-    menu_box.append(&pen_width_box);
-    menu_box.append(&pen_pressure_box);
-    menu_box.append(&eraser_width_box);
-    menu_box.append(&eraser_pressure_box);
-    menu_box.append(&btn_save_state);
-    menu_box.append(&btn_save);
-    menu_box.append(&btn_save_png);
-    menu_box.append(&btn_save_frames);
-    menu_box.append(&btn_save_active_frame_png);
-    menu_box.append(&btn_copy);
-    menu_box.append(&btn_copy_active_frame);
-    menu_box.append(&btn_clear);
-    menu_box.append(&btn_hide);
-    menu_box.append(&btn_quit);
+    app_box.append(&btn_hide);
+    app_box.append(&btn_quit);
 
+
+    // Append all groups to the main menu
+    menu_box.append(&tools_expander);
+    menu_box.append(&view_expander);
+    menu_box.append(&edit_expander);
+    menu_box.append(&export_expander);
+    menu_box.append(&app_expander);
+
+    // Event Connections
     btn_erase_mode.connect_clicked(glib::clone!(
         #[strong]
         state,
